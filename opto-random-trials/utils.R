@@ -1,64 +1,79 @@
-parse_subject <- function(session_folder){
-  file <- list.files(path=session_folder, pattern = "^sub-.+-")
-  assertthat::assert_that(assertthat::not_empty(file), 
-                          msg = glue::glue("No subject files found in {session_folder}"))
+# Parsing BIDS ------------------------------------------------------------
+
+parse_subject <- function(session_folder) {
+  file <- list.files(path = session_folder, pattern = "^sub-.+-")
+  assertthat::assert_that(
+    assertthat::not_empty(file),
+    msg = glue::glue("No subject files found in {session_folder}")
+  )
   subject <- strsplit(file[1], split = "-|_")[[1]][2]
   return(subject)
 }
 
 
-filter_between <- function(df, lower, upper){
-  assertthat::assert_that(assertthat::has_name(df, "cam_timestamps"))
-  assertthat::assert_that(assertthat::is.number(lower))
-  assertthat::assert_that(assertthat::is.number(upper))
-  df %>% 
-    filter(data.table::between(cam_timestamps, lower, upper))
-}
+# Plots -------------------------------------------------------------------
 
-plot_hypno <- function(behavior, behavior_leves, trials){
+
+plot_hypno <- function(behavior, behavior_leves, trials) {
   trial_colors <- c("opto" = "#149DFF", "sham" = "gray")
   p <- ggplot() +
     add_trials(trials) +
-    geom_line(
-      data = behavior,
-      aes(cam_timestamps/3600, 
-          factor(behavior, levels=behavior_levels),
-          group=1),
-      size = 0.8)+
-    scale_fill_manual(values=trial_colors)+
-    scale_color_manual(values=colorspace::darken(trial_colors))+
-    labs(x="Time (h)", y="")
+    geom_line(data = behavior,
+              aes(
+                cam_timestamps / 3600,
+                factor(behavior, levels = behavior_levels),
+                group = 1
+              ),
+              size = 0.8) +
+    scale_fill_manual(values = trial_colors) +
+    scale_color_manual(values = colorspace::darken(trial_colors)) +
+    labs(x = "Time (h)", y = "")
   return(p)
 }
 
-seconds_to_hours <- function(x){x/3600}
+seconds_to_hours <- function(x) {
+  x / 3600
+}
 
 add_trials <- function(trials) {
-  trials <- trials %>% 
+  trials <- trials %>%
     mutate(dplyr::across(.cols = c(onset, offset), .fns = seconds_to_hours))
-  return(
-  list(geom_vline(data = trials, 
-             mapping = aes(xintercept=onset, color = trial_type), show.legend = F),
-       geom_rect(data = trials, 
-              mapping = aes(xmin=onset, xmax=offset, ymin=-Inf, ymax=Inf, fill = trial_type),
-              alpha=0.5))
-  )
+  return(list(
+    geom_vline(
+      data = trials,
+      mapping = aes(xintercept = onset, color = trial_type),
+      show.legend = F
+    ),
+    geom_rect(
+      data = trials,
+      mapping = aes(
+        xmin = onset,
+        xmax = offset,
+        ymin = -Inf,
+        ymax = Inf,
+        fill = trial_type
+      ),
+      alpha = 0.5
+    )
+  ))
 }
 
 lag_df_crop <- function(df, behavior_levels) {
-  df %>% 
-    mutate(behavior = factor(behavior, levels=behavior_levels)) %>% 
-    group_by(trial_n) %>% 
+  df %>%
+    mutate(behavior = factor(behavior, levels = behavior_levels)) %>%
+    group_by(trial_n) %>%
     mutate(lg = lag(behavior, default = "first frame"),
            # check if there's continuity
-           flag = lg != behavior) %>% 
-    filter(flag) %>% 
-    mutate(time_end = lead(cam_timestamps, 1)) %>% 
+           flag = lg != behavior) %>%
+    filter(flag) %>%
+    mutate(time_end = lead(cam_timestamps, 1)) %>%
     # align all time axes
-    mutate(cam_shifted = cam_timestamps - first(cam_timestamps),
-           time_end_shifted = time_end - first(cam_timestamps),
-           # the last one has to go all the way to the end of the trial
-           time_end_shifted = if_else(is.na(time_end_shifted), 300, time_end_shifted))
+    mutate(
+      cam_shifted = cam_timestamps - first(cam_timestamps),
+      time_end_shifted = time_end - first(cam_timestamps),
+      # the last one has to go all the way to the end of the trial
+      time_end_shifted = if_else(is.na(time_end_shifted), 300, time_end_shifted)
+    )
 }
 
 
@@ -151,26 +166,77 @@ make_lights <- function(params, df) {
 }
 
 
-add_epoc <- function(joint_pellet_data, experiment_epocs){
-  joint_pellet_data %>% 
+add_epoc <- function(joint_pellet_data, experiment_epocs) {
+  assertthat::assert_that(assertthat::has_name(joint_pellet_data, "tdt_datetime"))
+  joint_pellet_data %>%
     mutate(
       epoc = case_when(
-        data.table::between(tdt_datetime, 
-                            exp_start, 
+        data.table::between(tdt_datetime,
+                            exp_start,
                             experiment_epocs["opto_start"]) ~ "pre",
-        data.table::between(tdt_datetime, 
-                            experiment_epocs["opto_start"], 
+        data.table::between(tdt_datetime,
+                            experiment_epocs["opto_start"],
                             experiment_epocs["opto_stop"]) ~ "stim",
-        data.table::between(tdt_datetime, 
-                            experiment_epocs["opto_stop"], 
+        data.table::between(tdt_datetime,
+                            experiment_epocs["opto_stop"],
                             exp_stop) ~ "post",
-        TRUE ~ "hab"),
-      epoc = factor(epoc,  levels=c("pre", "stim", "post")))  
+        TRUE ~ "hab"
+      ),
+      epoc = factor(epoc,  levels = c("pre", "stim", "post"))
+    )
 }
 
-summarise_by_epoc <- function(df){
-  df %>% 
-    group_by(epoc, .drop=F) %>% 
-    count()  
+
+# Behavior analysis -------------------------------------------------------
+
+summarise_by_epoc <- function(df) {
+  assertthat::assert_that(assertthat::has_name(df, "epoc"))
+  df %>%
+    dplyr::group_by(epoc, .drop = F) %>%
+    dplyr::count()
 }
 
+bin_behavior <- function(df, time_sec, bin_sec) {
+  max_t = max(dplyr::pull(df, {
+    {
+      time_sec
+    }
+  }))
+  breaks <- seq(from = 0,
+                to = max_t + bin_sec,
+                by = bin_sec)
+  # the function mfv returns the most frequent value
+  # it there are ties, it returns the first of the n ties, not perfect but good enough
+  df %>%
+    dplyr::mutate(bin = cut({
+      {
+        time_sec
+      }
+    }, breaks = breaks)) %>%
+    dplyr::group_by(bin) %>%
+    dplyr::mutate(mfv1 = statip::mfv1(behavior)) %>%
+    dplyr::ungroup()
+}
+
+# This function cleans the names after using a `cut` on a column
+clean_cut_labels <- function(cut_labels) {
+  mat <-
+    stringr::str_split(
+      string = stringr::str_sub(cut_labels, start = 2, end = -2),
+      pattern = ",",
+      simplify = TRUE,
+      n = 2
+    )
+  mat <- apply(mat, 2, as.numeric)
+  colnames(mat) <- c("low", "high")
+  return(mat)
+}
+
+
+filter_between <- function(df, col, lower, upper) {
+  assertthat::assert_that(assertthat::is.number(lower))
+  assertthat::assert_that(assertthat::is.number(upper))
+  assertthat::assert_that(lower < upper)
+  df %>%
+    dpyr::filter(data.table::between({{col}}, lower, upper))
+}
