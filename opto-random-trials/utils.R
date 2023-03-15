@@ -238,5 +238,5 @@ filter_between <- function(df, col, lower, upper) {
   assertthat::assert_that(assertthat::is.number(upper))
   assertthat::assert_that(lower < upper)
   df %>%
-    dpyr::filter(data.table::between({{col}}, lower, upper))
+    dplyr::filter(data.table::between({{col}}, lower, upper))
 }
