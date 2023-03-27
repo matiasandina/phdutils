@@ -30,3 +30,71 @@ plot_eeg_array <- function(ap, ml){
     scale_x_continuous(limits = c(-3.5, 3.5), )+
     scale_y_continuous(limits = c(-5, 5))
 }
+
+smooth_mode <- function(x, width=3){
+  zoo::rollapply(data = x, 
+                 align = "center",
+                 width = width,
+                 FUN = collapse::fmode, 
+                 # partial = TRUE keeps the ends to be same length
+                 partial=TRUE)
+}
+
+
+# Plotting ----------------------------------------------------------------
+# This is not a multi-taper spectrogram but it's OK
+spectro <- function(data, sf, nfft=1024, window=256, overlap=128, t0=0, plot_spec = T, normalize = F, return_data = F, ...){
+  
+  # create spectrogram
+  spec = signal::specgram(x = data,
+                          n = nfft,
+                          Fs = sf,
+                          window = window,
+                          overlap = overlap
+  )
+  
+  # discard phase info
+  S = as.data.frame(abs(spec$S))
+  # normalize
+  if(normalize){
+    S = S/max(S)  
+  }
+  
+  # name S
+  names(S) <- spec$t
+  # add freq
+  S$f = spec$f
+  
+  # pivot longer
+  S <- S %>% pivot_longer(-f, names_to = "time", values_to = "power") %>% 
+    mutate(time = as.numeric(time))
+  
+  # config time axis
+  if (is.numeric(t0)) {
+    S <- mutate(S, time = time + t0)
+  } else if (is.POSIXct(t0)){
+    S <- mutate(S, time = as.POSIXct(time, origin = t0))
+  } else{
+    stop("t0 must be either `numeric` or `POSIXct`")
+  }
+  
+  out_plot <- 
+    ggplot(S, aes(time, f, fill = power)) + 
+    geom_tile(show.legend = F) +
+    scale_fill_viridis_c(...) +
+    labs(y = "Freq (Hz)") 
+  return(out_plot)
+}
+
+plot_trace <- function(df, x, y, trange, ...){
+  p1 <- ggplot(df %>% 
+                 filter(data.table::between({{x}},
+                                            trange[1],
+                                            trange[2])
+                 ),
+               aes(x={{x}}, y={{y}})) + 
+    geom_line(...) + 
+    xlab("")
+  return(p1)
+}
+
