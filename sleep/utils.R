@@ -98,3 +98,34 @@ plot_trace <- function(df, x, y, trange, ...){
   return(p1)
 }
 
+get_ethogram <- function(data, x, behaviour, sampling_period = NULL){
+  if (is.null(sampling_period)){
+    cli::cli_alert_warning("`sampling_period` not provided.")
+    sampling_period <- min(diff(dplyr::pull(data, {{x}})))
+    cli::cli_inform("Sampling period estimated to {sampling_period} using min difference between observations")
+  }
+  data <- dplyr::select(data, x = {{x}}, behaviour = {{behaviour}}) 
+  etho <- data %>% 
+    dplyr::mutate(run_id = vctrs::vec_identify_runs(behaviour)) %>% 
+    dplyr::group_by(run_id) %>% 
+    dplyr::summarise(behaviour = base::unique(behaviour), 
+                     xend = dplyr::last(x) + sampling_period, 
+                     x = dplyr::first(x), 
+                     duration = xend - x,
+                     .groups = "keep") %>% 
+    dplyr::select(run_id, x, xend, behaviour, duration)
+  return(etho)
+}
+
+filter_between_join_behavior <- function(photometry_data, sleep_data, .x) {
+  photometry_data %>%  
+    filter(data.table::between(aligned_time_sec, 
+                               lower = max(0, .x$x - t_delta), 
+                               # don't add anything here
+                               upper = min(max_t, .x$xend))) %>%
+    mutate(rel_time = aligned_time_sec - dplyr::first(aligned_time_sec) - t_delta) %>%
+    left_join(select(sleep_data, aligned_time_sec, sleep), 
+              # we need a rolling join here because the two time columns will not be identical (numerical precision)
+              # photometry time >= behavior time is key to avoid off by-one errors
+              by = join_by(closest(aligned_time_sec >= aligned_time_sec)))
+}

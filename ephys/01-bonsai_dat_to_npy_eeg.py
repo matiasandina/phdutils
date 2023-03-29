@@ -75,6 +75,7 @@ if has_camera:
 emg_channels = find_channels(config, "EMG")
 if emg_channels is None:
   console.error("Indices for EMG Channels not found in channel map before filtering.\nCheck your data!\nExiting program.", severe=True)
+  sys.exit(0)
 else:
   console.success(f"Found EMG channels at idx {emg_channels}. Not filtering those")
 

@@ -115,39 +115,40 @@ def find_pulse_onset(ttl_file, ttl_idx, timestamps_file, buffer, round=False):
     out.iloc[:, 1] = pd.to_datetime(out.iloc[:,1]) + dt
     return out
 
+
 def ui_find_file(title=None, initialdir=None, file_type=None):
+  """
+  Find a file using a GUI.
+  :param title: Title of the dialog.
+  :param initialdir: Initial directory.
+  :param file_type: File type.
+  :return: File path.
+  """
   import os
   from PyQt6.QtWidgets import QApplication, QFileDialog
 
-  app = QApplication([])
-  file_dialog = QFileDialog()
-  file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
+  app = QApplication.instance()
+  if app is None:
+    app = QApplication([])
 
-  if file_type:
-      filter = f"{file_type} files (*.{file_type})"
-      file_dialog.setNameFilter(filter)
-  else:
-      file_dialog.setNameFilter("All files (*);;")
-
+  if title is None:
+    title = 'Find a file'
   if initialdir is None:
-      initialdir = os.getcwd()
-  elif initialdir == '~':
-      initialdir = os.path.expanduser('~')
-
-  file_dialog.setDirectory(initialdir)
-
-  if title:
-      file_dialog.setWindowTitle(title)
-
-  if file_dialog.exec():
-      file_path = file_dialog.selectedFiles()[0]
-      print(f"Selected {file_path}")
-      file_dialog.destroy()  # Clean up the file dialog window
-      #app.processEvents()
-      #app.quit()  # Exit the event loop
-      return file_path
+    initialdir = os.getcwd()
+  if file_type is None:
+    file_filter = 'All files (*.*)'
   else:
-      print("No file selected")
-      file_dialog.deleteLater()  # Clean up the file dialog window
-      #app.quit()  # Exit the event loop
-      return None
+    file_filter = f"{file_type} files (*.{file_type})"
+    #file_filter = [f"{file} files (*.{file})" for file in file_type]
+    #file_filter = ';;'.join(file_filter)
+
+  file_path, _ = QFileDialog.getOpenFileName(None, title, initialdir, file_filter)
+  
+  if file_path:
+    # no multiple files for now...file_path will be a string
+    #file_path = file_path[0]
+    print(f"Selected {file_path}")
+    return(file_path)
+  else:
+    print("No file selected")
+    return None

@@ -10,76 +10,80 @@ import tdt
 from utils import *
 
 console.log("Choose TTL file")
-root = tk.Tk()
-root.withdraw()
 ttl_file = ui_find_file(title="Choose TTL file", initialdir=os.path.expanduser("~"), file_type = "npy")
 ephys_folder = os.path.dirname(ttl_file)
 console.info(f"Working on {ephys_folder}")
-
+# find config
 config = read_config(ephys_folder)
+# Ask for TDT photometry data
+console.log("Choose any Photometry file")
+photometry_file = ui_find_file(title="Choose any Photometry file", initialdir=ephys_folder)
+tdt_folder = os.path.dirname(photometry_file)
+console.info(f"Selected TDT folder is {tdt_folder}")
+
+# we read a very very small portion only to get the info
+block = tdt.read_block(tdt_folder, t1=0, t2=0.5)
+# we also read the events, these might lead to errors when changing the name of the store
+pulse_sync_name = config['pulse_sync']
+tdt_pulse_onset = tdt.read_block(tdt_folder, store = pulse_sync_name).epocs[pulse_sync_name].onset
+# We cannot use the last offset here because it's inf, but the difference is < pulse's width here
+tdt_epoc_duration = tdt_pulse_onset[-1] - tdt_pulse_onset[0]
 
 console.info(f"loading {ttl_file}")
-ttl_events = np.load(ttl_file)
-ttl_time_file = validate_file_exists(ephys_folder, "ttl_timestamp*")
-console.info(f"loading {ttl_time_file}")
-ttl_timestamps = pd.read_csv(ttl_time_file)
-
-# verify ttl lenghts
-if (ttl_events.shape[1] == ttl_timestamps.shape[0] * config['buffer']['ttl']):
-  console.success("ttl_events have correct shape")
-else:
-  console.warn("ttl_events have incorrect shape", severe=True)
-
-
-# 1000 Hz is 1024 samples in 1024 milliseconds
-# samples are collected using the ttl buffer
-# first 60 seconds
-n_samples = 60 * config['aq_freq_hz'] 
-
-# find photometry events
+ttl_array = np.load(ttl_file)
 photo_ttl_idx = np.where("photometry" in config["ttl_names"])[0]
-photo_events = ttl_events[photo_ttl_idx, :].flatten()
-photo_first_high = min(np.where(photo_events == 1)[0])
-rec_start = photo_events[photo_first_high:(photo_first_high+n_samples)]
+photo_events = ttl_array[photo_ttl_idx, :].flatten()
+pulse_onset = np.where(np.diff(photo_events, prepend=0) > 0)[0]
+pulse_offset = np.where(np.diff(photo_events, prepend=0) < 0)[0]
+# These things should give the same duration
+tdt_recording_duration_sec = (pulse_offset[-1] - pulse_onset[0]) / 1000
+# this difference should be close to zero!
+tdt_bonsai_diff = tdt_recording_duration_sec - block.info.duration.total_seconds()
 
-#peaks, _ = find_peaks(rec_start, plateau_size=[1, 250])
-peaks = np.where(np.diff(rec_start, prepend=0) > 0)[0]
-# shift peaks to original idx
-peaks = peaks + photo_first_high
+# Print some info
+console.info(f"Duration difference: block info - bonsai pulses = {tdt_bonsai_diff} seconds")
+console.info(f"Duration difference: block info - tdt sent epocs = {block.info.duration.total_seconds() - tdt_epoc_duration} seconds")
+# There's something weird with a difference of pulses between counting methods
+console.info(f"TDT sent: {len(tdt_pulse_onset)} pulses")
+console.info(f"Bonsai received: {len(pulse_onset)} pulses")
 
-multiples_of_batch = peaks/config['buffer']['ttl'] 
-distance_from_batch =  multiples_of_batch - np.round(multiples_of_batch)
+if len(tdt_pulse_onset) != len(pulse_onset):
+  console.warn(f"It seems that the number of pulses on each recording is not equal", severe = True)
+  # This should find the places where 
+  # we do aq_freq + 2 to be safe from off by one errors. We are looking for big jumps
+  jumps = np.where(np.diff(pulse_onset, prepend=0) > config['aq_freq_hz'] + 2)[0]
+  # the first jump should be at idx zero
+  alignment_idx = jumps[1]
+  console.info(f'Found jumps in `pulse_onset` at idx: {jumps}. Trying to align with first jump.')
+  if len(pulse_onset[alignment_idx:]) == len(tdt_pulse_onset):
+    console.info(f'Aligment successful using new idx at {alignment_idx}')
+    eeg_t0_sec = pulse_onset[alignment_idx] / config['aq_freq_hz']
+  else:
+    console.error(f"Could not aling the data. Please check it manually", severe=True)
+    sys.exit(0)
+else:
+  console.success(f"Lengths match on both recordings, aligning to first event")
+  # If everything checks out 
+  alignment_idx = 0
+  eeg_t0_sec = pulse_onset[alignment_idx] / config['aq_freq_hz']
 
-# send all negative things to infinity and ask for the smallest positive thing
-positive_d_from_batch = np.where(distance_from_batch > 0, distance_from_batch, np.inf)
-# TODO validate close enough
-batch_to_seconds = config['buffer']['ttl']/config['aq_freq_hz']
-min_d = positive_d_from_batch.min()
-print(f"Distance to batch multiple {min_d}, {min_d * batch_to_seconds} seconds")
-
-if min_d > 0.1:
-  console.error(f"Cannot align below threshold of 100 ms", severe=True)
-  sys.exit()
 
 
 # OUTPUTS
-# closest_to_batch: the index of the best aligned peak 
-# best_aligned_ttl_idx: the index ttl sample
-# best_aligned_timestamp_idx: the index of the timestamp to use as new t0
-
-closest_to_batch = int(np.where(distance_from_batch > 0, distance_from_batch, np.inf).argmin())
-best_aligned_ttl_idx = int(peaks[closest_to_batch])
-best_aligned_timestamp_idx = int(best_aligned_ttl_idx / config['buffer']['ttl'])
 
 params_dict = {
-  "closest_to_batch" : {"description": "the index of the best aligned peak",
-                      "value": closest_to_batch
+  "eeg_t0_sec" : {"description": "the time in seconds to subtract from the time vector on the ephys recording",
+                      "value": float(eeg_t0_sec)
   },
-  "best_aligned_ttl_idx" : {"description": 'the index of the best aligned ttl sample',
-                          "value": best_aligned_ttl_idx
+  "alignment_idx" :{"description": "The index on bonsai_pulse_onset used for alignment. pulse_onset[alignment_idx] shoud be eeg_t0_sec. This will be zero, unless bonsai received more pulses than TDT sent (e.g., TDT recording started and stopped while bonsai kept recording)",
+                      "vaue" : int(alignment_idx)
+
   },
-  "best_aligned_timestamp_idx" : {"description": "the index of the ttl timestamp to use as new t0",
-                                "value": best_aligned_timestamp_idx}
+  "tdt_pulses_sent" : {"description": 'the number of pulses sent by TDT',
+                          "value": len(tdt_pulse_onset)
+  },
+  "bonsai_pulses_received" : {"description": "the number of pulses received by bonsai",
+                                "value": len(pulse_onset)}
 }
 
 params_file = os.path.join(ephys_folder, f"{Path(ttl_file).stem}_alignment_params.yaml")

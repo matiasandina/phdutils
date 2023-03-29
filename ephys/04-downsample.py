@@ -42,6 +42,6 @@ else:
 	channel_map = create_channel_map(data_down, config)
 	console.info(f"Provided channel map is {channel_map}")
 	eeg_df = eeg_df.set_axis(channel_map, axis=1, copy=False)
-	outfilename = os.path.join(ephys_folder, f"_desc-down-{downsample_factor}_eeg.csv.gz")
+	outfilename = os.path.join(ephys_folder, f"eegdata_desc-down-{downsample_factor}_eeg.csv.gz")
 	eeg_df.to_csv(outfilename, index=False, header=True)
 	console.success(f"Downsampled data written to {outfilename}")
