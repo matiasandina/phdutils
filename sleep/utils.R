@@ -104,16 +104,25 @@ get_ethogram <- function(data, x, behaviour, sampling_period = NULL){
     sampling_period <- min(diff(dplyr::pull(data, {{x}})))
     cli::cli_inform("Sampling period estimated to {sampling_period} using min difference between observations")
   }
-  data <- dplyr::select(data, x = {{x}}, behaviour = {{behaviour}}) 
+  
+  if(dplyr::is_grouped_df(data)){
+    cli::cli_alert_info("Data was grouped by {dplyr:::group_vars(data)}")
+    data <- dplyr::select(data, dplyr::group_cols(), x = {{x}}, behaviour = {{behaviour}})
+  } else {
+    data <- dplyr::select(data, x = {{x}}, behaviour = {{behaviour}}) 
+  }
+  
   etho <- data %>% 
     dplyr::mutate(run_id = vctrs::vec_identify_runs(behaviour)) %>% 
-    dplyr::group_by(run_id) %>% 
+    # add to whatever previous layer was there
+    group_by(run_id, .add=TRUE) %>% 
     dplyr::summarise(behaviour = base::unique(behaviour), 
                      xend = dplyr::last(x) + sampling_period, 
                      x = dplyr::first(x), 
-                     duration = xend - x,
+                     duration = xend - x, 
                      .groups = "keep") %>% 
-    dplyr::select(run_id, x, xend, behaviour, duration)
+    dplyr::select(dplyr::group_cols(), x, xend, behaviour, duration)
+  
   return(etho)
 }
 
