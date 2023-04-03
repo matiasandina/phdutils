@@ -117,38 +117,46 @@ def find_pulse_onset(ttl_file, ttl_idx, timestamps_file, buffer, round=False):
 
 
 def ui_find_file(title=None, initialdir=None, file_type=None):
-  """
-  Find a file using a GUI.
-  :param title: Title of the dialog.
-  :param initialdir: Initial directory.
-  :param file_type: File type.
-  :return: File path.
-  """
-  import os
-  from PyQt6.QtWidgets import QApplication, QFileDialog
+    """
+    Find a file using a GUI.
+    :param title: Title of the dialog.
+    :param initialdir: Initial directory.
+    :param file_type: File type.
+    :return: File path.
+    """
+    import os
+    from PyQt6.QtWidgets import QApplication, QFileDialog
 
-  app = QApplication.instance()
-  if app is None:
-    app = QApplication([])
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+        is_new_instance = True
+    else:
+        is_new_instance = False
 
-  if title is None:
-    title = 'Find a file'
-  if initialdir is None:
-    initialdir = os.getcwd()
-  if file_type is None:
-    file_filter = 'All files (*.*)'
-  else:
-    file_filter = f"{file_type} files (*.{file_type})"
-    #file_filter = [f"{file} files (*.{file})" for file in file_type]
-    #file_filter = ';;'.join(file_filter)
+    if title is None:
+        title = 'Find a file'
+    if initialdir is None:
+        initialdir = os.getcwd()
+    if file_type is None:
+        file_filter = 'All files (*.*)'
+    else:
+        file_filter = f"{file_type} files (*.{file_type})"
+        #file_filter = [f"{file} files (*.{file})" for file in file_type]
+        #file_filter = ';;'.join(file_filter)
 
-  file_path, _ = QFileDialog.getOpenFileName(None, title, initialdir, file_filter)
-  
-  if file_path:
-    # no multiple files for now...file_path will be a string
-    #file_path = file_path[0]
-    print(f"Selected {file_path}")
-    return(file_path)
-  else:
-    print("No file selected")
-    return None
+    file_path, _ = QFileDialog.getOpenFileName(None, title, initialdir, file_filter)
+
+    if file_path:
+        # no multiple files for now...file_path will be a string
+        #file_path = file_path[0]
+        print(f"Selected {file_path}")
+        result = file_path
+    else:
+        print("No file selected")
+        result = None
+
+    if is_new_instance:
+        app.quit()
+
+    return result

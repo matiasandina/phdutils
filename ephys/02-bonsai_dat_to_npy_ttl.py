@@ -8,8 +8,6 @@ from pathlib import Path
 from utils import *
 
 console.log("Choose EEG file")
-root = tk.Tk()
-root.withdraw()
 eeg_file = ui_find_file(title="Choose EEG file", initialdir=os.path.expanduser("~"))
 ephys_folder = os.path.dirname(eeg_file)
 console.info(f"Working on {ephys_folder}")

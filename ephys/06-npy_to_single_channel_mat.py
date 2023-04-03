@@ -11,8 +11,6 @@ from utils import *
 
 # Load data to work with
 console.info("Choose filtered EEG file")
-root = tk.Tk()
-root.withdraw()
 eeg_file = ui_find_file(title="Choose filtered eeg file", initialdir=os.path.expanduser("~"), file_type = "npy")
 
 root_dir = os.path.dirname(eeg_file)

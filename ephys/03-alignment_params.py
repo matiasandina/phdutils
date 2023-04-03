@@ -9,6 +9,15 @@ import pandas as pd
 import tdt
 from utils import *
 
+ 
+def fix_tdt_names(string, append): 
+  # if the epocs have less than 3 letters, they would be stored as
+  # "PC0/" but can only be accessed using "PC0_" on the dict
+  # this little helper gives a hand to avoid errors if they happened to occur
+  if len(string) < 4:
+    return f"{string}{append}"
+
+
 console.log("Choose TTL file")
 ttl_file = ui_find_file(title="Choose TTL file", initialdir=os.path.expanduser("~"), file_type = "npy")
 ephys_folder = os.path.dirname(ttl_file)
@@ -25,7 +34,7 @@ console.info(f"Selected TDT folder is {tdt_folder}")
 block = tdt.read_block(tdt_folder, t1=0, t2=0.5)
 # we also read the events, these might lead to errors when changing the name of the store
 pulse_sync_name = config['pulse_sync']
-tdt_pulse_onset = tdt.read_block(tdt_folder, store = pulse_sync_name).epocs[pulse_sync_name].onset
+tdt_pulse_onset = tdt.read_block(tdt_folder, store = fix_tdt_names(pulse_sync_name, '/')).epocs[fix_tdt_names(pulse_sync_name, '_')].onset
 # We cannot use the last offset here because it's inf, but the difference is < pulse's width here
 tdt_epoc_duration = tdt_pulse_onset[-1] - tdt_pulse_onset[0]
 
