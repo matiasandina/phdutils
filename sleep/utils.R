@@ -1,12 +1,16 @@
 # This function helps import sleep labels saved into .mat by Accusleep
 # the labels are buried inside the $labels as an nx1 matrix, we want to output a vector
-import_mat_labels <- function(filepath){
-  return(as.vector(R.matlab::readMat(filepath)$labels))
+import_mat_labels <- function(filepath, convert = TRUE){
+  labels <- as.vector(R.matlab::readMat(filepath)$labels)
+  if (convert){
+    labels <- convert_accusleep_labels(labels)
+  }
+  return(labels)
 }
 
 convert_accusleep_labels <- function(col){
   return(
-    case_when(col == 1 ~ "REM",
+    dplyr::case_when(col == 1 ~ "REM",
               col == 2 ~ "Wake",
               col == 3 ~ "NREM")
     )
