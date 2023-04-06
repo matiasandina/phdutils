@@ -14,7 +14,7 @@ parse_subject <- function(session_folder) {
 # Plots -------------------------------------------------------------------
 
 
-plot_hypno <- function(behavior, behavior_leves, trials) {
+plot_hypno <- function(behavior, behavior_levels, trials) {
   trial_colors <- c("opto" = "#149DFF", "sham" = "gray")
   p <- ggplot() +
     add_trials(trials) +
