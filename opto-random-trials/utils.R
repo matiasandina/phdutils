@@ -14,17 +14,20 @@ parse_subject <- function(session_folder) {
 # Plots -------------------------------------------------------------------
 
 
-plot_hypno <- function(behavior, behavior_levels, trials) {
+plot_hypno <- function(behavior_data, time_sec_col, behavior_col, behavior_levels = NULL, trials) {
+  if (is.null(behavior_levels)){
+    behavior_levels <- pull(behavior_data, {{behavior_col}}) %>% unique()
+  }
   trial_colors <- c("opto" = "#149DFF", "sham" = "gray")
   p <- ggplot() +
     add_trials(trials) +
-    geom_line(data = behavior,
+    geom_line(data = behavior_data,
               aes(
-                cam_timestamps / 3600,
-                factor(behavior, levels = behavior_levels),
+                x = seconds_to_hours({{time_sec_col}}),
+                y = factor({{behavior_col}}, levels = behavior_levels),
                 group = 1
               ),
-              size = 0.8) +
+              linewidth = 0.8) +
     scale_fill_manual(values = trial_colors) +
     scale_color_manual(values = colorspace::darken(trial_colors)) +
     labs(x = "Time (h)", y = "")
