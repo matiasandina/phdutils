@@ -9,6 +9,8 @@ import_mat_labels <- function(filepath, convert = TRUE){
 }
 
 convert_accusleep_labels <- function(col){
+  assertthat::assert_that(is.numeric(col),
+                          msg = glue::glue("`col` must be numeric, received `{class(col)}`"))
   return(
     dplyr::case_when(col == 1 ~ "REM",
               col == 2 ~ "Wake",
@@ -21,6 +23,23 @@ make_time_column <- function(sf, ...){
 }
 
 seconds_to_hours <- function(x){x/3600}
+
+read_sleep_from_mat <- function(filepath, scoring_period = 2, convert_accusleep=TRUE){
+  sleep_behavior <- tibble(
+    sleep = import_mat_labels(sleep_behavior_file, convert=convert_accusleep),
+    behavior = ifelse(sleep == "Wake", sleep, "Sleep")) %>% 
+    mutate(time_sec = make_time_column(sf = 1/scoring_period,
+                                       length.out=n()), 
+           aligned_time_sec = time_sec - eeg_t0_sec) # %>% 
+    #filter(data.table::between(aligned_time_sec, 0, max_t))
+  # Microarousals
+  sleep_behavior <- sleep_behavior %>% 
+    mutate(run_id = vctrs::vec_identify_runs(sleep)) %>% 
+    mutate(.by="run_id", 
+           duration = last(aligned_time_sec) - first(aligned_time_sec) + scoring_period, 
+           sleep2 = if_else(sleep == "Wake" & duration < 16, "MA", sleep)) 
+  return(sleep_behavior)
+}
 
 
 plot_eeg_array <- function(ap, ml){
@@ -130,6 +149,9 @@ get_ethogram <- function(data, x, behaviour, sampling_period = NULL){
   return(etho)
 }
 
+# This function is useful to bind a tibble nested by run_id and get the photometry and behavior traces aligned in time
+# .x is in the form of trange with x and xend for each run_id. 
+# run this function inside a mutate(snips = map(tranges, ...))
 filter_between_join_behavior <- function(photometry_data, sleep_data, .x) {
   photometry_data %>%  
     filter(data.table::between(aligned_time_sec, 
