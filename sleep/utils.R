@@ -30,8 +30,9 @@ read_sleep_from_mat <- function(filepath, scoring_period = 2, convert_accusleep=
     behavior = ifelse(sleep == "Wake", sleep, "Sleep")) %>% 
     mutate(time_sec = make_time_column(sf = 1/scoring_period,
                                        length.out=n()), 
-           aligned_time_sec = time_sec - eeg_t0_sec) # %>% 
-    #filter(data.table::between(aligned_time_sec, 0, max_t))
+           aligned_time_sec = time_sec - eeg_t0_sec)  %>% 
+    filter(data.table::between(aligned_time_sec, 0, max_t))
+  
   # Microarousals
   sleep_behavior <- sleep_behavior %>% 
     mutate(run_id = vctrs::vec_identify_runs(sleep)) %>% 
