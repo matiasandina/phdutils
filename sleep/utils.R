@@ -153,15 +153,45 @@ get_ethogram <- function(data, x, behaviour, sampling_period = NULL){
 # This function is useful to bind a tibble nested by run_id and get the photometry and behavior traces aligned in time
 # .x is in the form of trange with x and xend for each run_id. 
 # run this function inside a mutate(snips = map(tranges, ...))
-filter_between_join_behavior <- function(photometry_data, sleep_data, sleep_col, .x) {
+filter_between_join_behavior <- function(photometry_data, sleep_data, sleep_col, .x, right_end = NULL) {
+  
+  if (is.null(right_end)){
+    right_end <- .x$end + t_delta
+  } else {
+    right_end <- min(.x$x + right_end, .x$xend + t_delta)
+  }
+  
   photometry_data %>%  
     filter(data.table::between(aligned_time_sec, 
                                lower = max(0, .x$x - t_delta), 
                                # don't add anything here
-                               upper = min(max_t, .x$xend))) %>%
+                               upper = min(max_t, right_end))) %>%
     mutate(rel_time = aligned_time_sec - dplyr::first(aligned_time_sec) - t_delta) %>%
-    left_join(select(sleep_data, aligned_time_sec, {{sleep_col}}), 
+    left_join(select(sleep_data, aligned_time_sec, behaviour = {{sleep_col}}), 
               # we need a rolling join here because the two time columns will not be identical (numerical precision)
               # photometry time >= behavior time is key to avoid off by-one errors
               by = join_by(closest(aligned_time_sec >= aligned_time_sec)))
+}
+
+
+# We can use this function to bin the data
+bin_snips <- function(data, bin_sec = 0.5){
+  data %>% 
+  unnest(snips) %>% 
+    # key for reordering factors
+    ungroup() %>% 
+    mutate(run_durat = map_dbl(tranges, function(.x) .x$duration),
+           # put the level order acording to the duration
+           run_id_durat = fct_reorder(as.factor(run_id), desc(run_durat)),
+           # 1 second 
+           t_bin = cut(rel_time, breaks = seq(from = min(rel_time) - bin_sec, 
+                                              to = max(rel_time) + bin_sec, 
+                                              by = bin_sec)),
+           .by = c(behaviour, previous_behaviour)) %>%
+    summarise(mean_zdff = mean(zdFF), 
+              behaviour = unique(behaviour),
+              previous_behaviour = unique(previous_behaviour),
+              .by=c(run_id_durat, t_bin)) %>%
+    mutate(t_high = clean_cut_labels(t_bin)[,2])
+  
 }
