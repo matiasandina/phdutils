@@ -24,6 +24,12 @@ make_time_column <- function(sf, ...){
 
 seconds_to_hours <- function(x){x/3600}
 
+# This comes handy for the arrows in facets and whatnot
+paste_behavior <- function(pre, post){
+  paste(pre, "→", post)
+}
+
+
 read_sleep_from_mat <- function(filepath, scoring_period = 2, convert_accusleep=TRUE){
   sleep_behavior <- tibble(
     sleep = import_mat_labels(sleep_behavior_file, convert=convert_accusleep),
@@ -150,24 +156,31 @@ get_ethogram <- function(data, x, behaviour, sampling_period = NULL){
   return(etho)
 }
 
+# This function is intended to grab outside data and filter passing a nested .x with x$x and x$xend
+filter_tranges <- function(data, .x, right_end = NULL){
+  if (is.null(right_end)){
+    # use all signal
+    right_end <- .x$xend + t_delta
+  } else {
+    # use up to right_end in seconds
+    right_end <- min(.x$x + right_end, .x$xend + t_delta)
+  }
+
+   data %>%  
+    filter(data.table::between(aligned_time_sec, 
+                               lower = max(0, .x$x - t_delta), 
+                               upper = min(max_t, right_end))) %>%
+    mutate(rel_time = aligned_time_sec - dplyr::first(aligned_time_sec) - t_delta)
+
+}
+
 # This function is useful to bind a tibble nested by run_id and get the photometry and behavior traces aligned in time
 # .x is in the form of trange with x and xend for each run_id. 
 # run this function inside a mutate(snips = map(tranges, ...))
-filter_between_join_behavior <- function(photometry_data, sleep_data, sleep_col, .x, right_end = NULL) {
+filter_between_join_behavior <- function(data, sleep_data, sleep_col, .x, right_end = NULL) {
   
-  if (is.null(right_end)){
-    right_end <- .x$end + t_delta
-  } else {
-    right_end <- min(.x$x + right_end, .x$xend + t_delta)
-  }
-  
-  photometry_data %>%  
-    filter(data.table::between(aligned_time_sec, 
-                               lower = max(0, .x$x - t_delta), 
-                               # don't add anything here
-                               upper = min(max_t, right_end))) %>%
-    mutate(rel_time = aligned_time_sec - dplyr::first(aligned_time_sec) - t_delta) %>%
-    left_join(select(sleep_data, aligned_time_sec, behaviour = {{sleep_col}}), 
+    filter_tranges(data, right_end = right_end, .x = .x) %>% 
+    left_join(select(sleep_data, aligned_time_sec, {{sleep_col}}), 
               # we need a rolling join here because the two time columns will not be identical (numerical precision)
               # photometry time >= behavior time is key to avoid off by-one errors
               by = join_by(closest(aligned_time_sec >= aligned_time_sec)))
