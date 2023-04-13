@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 # photometry sync
 import tdt
+import phototdt
 from utils import *
 
  
@@ -32,6 +33,8 @@ console.info(f"Selected TDT folder is {tdt_folder}")
 
 # we read a very very small portion only to get the info
 block = tdt.read_block(tdt_folder, t1=0, t2=0.5)
+# get the duration of the photometry recording
+max_t = phototdt.get_total_duration(block)
 # we also read the events, these might lead to errors when changing the name of the store
 pulse_sync_name = config['pulse_sync']
 tdt_pulse_onset = tdt.read_block(tdt_folder, store = fix_tdt_names(pulse_sync_name, '/')).epocs[fix_tdt_names(pulse_sync_name, '_')].onset
@@ -83,6 +86,10 @@ else:
 params_dict = {
   "eeg_t0_sec" : {"description": "the time in seconds to subtract from the time vector on the ephys recording",
                       "value": float(eeg_t0_sec)
+  },
+  "photo_max_t" : {"description": "the maximum time in photometry recording in seconds",
+                      "value" : max_t
+
   },
   "alignment_idx" :{"description": "The index on bonsai_pulse_onset used for alignment. pulse_onset[alignment_idx] shoud be eeg_t0_sec. This will be zero, unless bonsai received more pulses than TDT sent (e.g., TDT recording started and stopped while bonsai kept recording)",
                       "vaue" : int(alignment_idx)
