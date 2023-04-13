@@ -32,7 +32,7 @@ paste_behavior <- function(pre, post){
 
 read_sleep_from_mat <- function(filepath, scoring_period = 2, convert_accusleep=TRUE){
   sleep_behavior <- tibble(
-    sleep = import_mat_labels(sleep_behavior_file, convert=convert_accusleep),
+    sleep = import_mat_labels(filepath, convert=convert_accusleep),
     behavior = ifelse(sleep == "Wake", sleep, "Sleep")) %>% 
     mutate(time_sec = make_time_column(sf = 1/scoring_period,
                                        length.out=n()), 
