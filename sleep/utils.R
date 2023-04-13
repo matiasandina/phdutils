@@ -186,25 +186,3 @@ filter_between_join_behavior <- function(data, sleep_data, sleep_col, .x, right_
               by = join_by(closest(aligned_time_sec >= aligned_time_sec)))
 }
 
-
-# We can use this function to bin the data
-bin_snips <- function(data, bin_sec = 0.5){
-  data %>% 
-  unnest(snips) %>% 
-    # key for reordering factors
-    ungroup() %>% 
-    mutate(run_durat = map_dbl(tranges, function(.x) .x$duration),
-           # put the level order acording to the duration
-           run_id_durat = fct_reorder(as.factor(run_id), desc(run_durat)),
-           # 1 second 
-           t_bin = cut(rel_time, breaks = seq(from = min(rel_time) - bin_sec, 
-                                              to = max(rel_time) + bin_sec, 
-                                              by = bin_sec)),
-           .by = c(behaviour, previous_behaviour)) %>%
-    summarise(mean_zdff = mean(zdFF), 
-              behaviour = unique(behaviour),
-              previous_behaviour = unique(previous_behaviour),
-              .by=c(run_id_durat, t_bin)) %>%
-    mutate(t_high = clean_cut_labels(t_bin)[,2])
-  
-}

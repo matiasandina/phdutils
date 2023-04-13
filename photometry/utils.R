@@ -106,3 +106,26 @@ interpolate_signals <- function(data, n_common = NULL, sampling_rate = NULL) {
     )
   }
 }
+
+
+# Binning Data ------------------------------------------------------------
+# We can use this function to bin the data
+bin_snips <- function(data, bin_sec = 0.5){
+  data %>% 
+    unnest(snips) %>% 
+    # key for reordering factors
+    ungroup() %>% 
+    mutate(run_id_durat = fct_reorder(as.factor(run_id), desc(duration)),
+           # 1 second 
+           t_bin = cut(rel_time, breaks = seq(from = min(rel_time) - bin_sec, 
+                                              to = max(rel_time) + bin_sec, 
+                                              by = bin_sec)),
+           .by = c(behaviour, previous_behaviour)) %>%
+    summarise(mean_zdff = mean(zdFF), 
+              behaviour = unique(behaviour),
+              previous_behaviour = unique(previous_behaviour),
+              .by=c(run_id_durat, t_bin)) %>%
+    mutate(t_high = clean_cut_labels(t_bin)[,2])
+  
+}
+
