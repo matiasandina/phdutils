@@ -30,7 +30,9 @@ paste_behavior <- function(pre, post){
 }
 
 
-read_sleep_from_mat <- function(filepath, scoring_period = 2, convert_accusleep=TRUE){
+read_sleep_from_mat <- function(filepath, params, scoring_period = 2, convert_accusleep=TRUE){
+  eeg_t0_sec <- pluck(params, 'eeg_t0_sec', 'value')
+  max_t <- pluck(params, 'photo_max_t', 'value')
   sleep_behavior <- tibble(
     sleep = import_mat_labels(filepath, convert=convert_accusleep),
     behavior = ifelse(sleep == "Wake", sleep, "Sleep")) %>% 

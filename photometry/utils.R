@@ -110,9 +110,20 @@ interpolate_signals <- function(data, n_common = NULL, sampling_rate = NULL) {
 
 # Binning Data ------------------------------------------------------------
 # We can use this function to bin the data
-bin_snips <- function(data, bin_sec = 0.5){
+bin_snips <- function(data, bin_sec = 0.5, below_duration=FALSE){
+  # Let's think about these two vectors
+  # NREM NREM WAKE WAKE NREM
+  # NREM NREM WAKE WAKE WAKE
+  # if below_duration = FALSE, all data will be binned (last epoch has NREM and WAKE averaged)
+  # if below_duration = TRUE, the last NREM epoch will be filtered out before averaging
+  data <- data %>% unnest(snips)
+  if (below_duration){
+    # This will mean that only portions of the data with specific behavior will count for the binning
+    # we will have whatever t_delta before and up to the epoch duration after
+    data <- filter(data, rel_time <= duration)
+  }
+  
   data %>% 
-    unnest(snips) %>% 
     # key for reordering factors
     ungroup() %>% 
     mutate(run_id_durat = fct_reorder(as.factor(run_id), desc(duration)),
@@ -125,7 +136,7 @@ bin_snips <- function(data, bin_sec = 0.5){
               behaviour = unique(behaviour),
               previous_behaviour = unique(previous_behaviour),
               .by=c(run_id_durat, t_bin)) %>%
-    mutate(t_high = clean_cut_labels(t_bin)[,2])
+    mutate(clean_cut_labels(t_bin) %>% as_tibble())
   
 }
 
