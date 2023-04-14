@@ -15,7 +15,7 @@ import random
 
 # Set the experiment
 sExperiment = "PhotoOptoRandTrialsTTL2Box"
-exp_duration_hours = 0.02 #4
+exp_duration_hours = 0.1 #4
 exp_duration_seconds = exp_duration_hours * 3600
 # we can put some large number here, anyway the amount of true trials is determined by the exp duration
 n_trials = 500
@@ -192,7 +192,7 @@ class ExperimentGUI(QWidget):
         for param_name, trial_key in param_map.items():
             value = trial_params[trial_key]
             self.syn.setParameterValue(train_name, param_name, value)
-            print(f"Trial {trial_n}: Set {param_name} to {value} using {trial_key}")
+            print(f"Trial {trial_n}: {train_name} Set {param_name} to {value} using {trial_key}")
 
         print(f'Trial {trial_n}: Ready to press {train_name}!')
 
@@ -207,8 +207,8 @@ if __name__ == '__main__':
     train_labels = ['Train 1', 'Train 2']
 
     # initialize connection to experimental device
-    #syn = tdt.SynapseAPI()
-    syn = []
+    syn = tdt.SynapseAPI()
+    #syn = []
     syn.setModeStr('Preview')
     # connect to the device and set the mode to Active
 
@@ -221,7 +221,7 @@ if __name__ == '__main__':
 
     # Generate the trial structure
     lights_df = generate_light_trials(frequencies_hz, weights, light_width_ms, n_trials)
-    stim_df = generate_stim_trials(stim_duty_cycles, stim_weights, stim_width_ms, n_trials)
+    stim_df = generate_stim_trials(stim_duty_cycles, stim_weights, stim_period_ms, n_trials)
     lights_df = lights_df.merge(stim_df, on="trial_n", suffixes=('',''))
 
     # Add the Trial Period and Width
