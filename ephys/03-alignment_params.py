@@ -17,6 +17,8 @@ def fix_tdt_names(string, append):
   # this little helper gives a hand to avoid errors if they happened to occur
   if len(string) < 4:
     return f"{string}{append}"
+  else:
+    return string
 
 
 console.log("Choose TTL file")
