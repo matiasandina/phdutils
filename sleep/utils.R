@@ -188,3 +188,13 @@ filter_between_join_behavior <- function(data, sleep_data, sleep_col, .x, right_
               by = join_by(closest(aligned_time_sec >= aligned_time_sec)))
 }
 
+
+# This function checks a particular run by filtering
+check_run_time <- function(data, id){
+  data %>%
+    ungroup() %>% 
+    filter(run_id == id) %>% 
+    unnest(tranges) %>% 
+    mutate(x = hms::as_hms(x + eeg_t0_sec)) %>% 
+    pull(x)
+}
