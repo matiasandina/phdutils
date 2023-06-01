@@ -10,7 +10,28 @@ import tdt
 import phototdt
 from utils import *
 
- 
+def find_mismatch(array1, array2):
+    # Check which array is longer
+    if len(array1) > len(array2):
+        longer_array = array1
+        shorter_array = array2
+    else:
+        longer_array = array2
+        shorter_array = array1
+        
+    # Iterate over the shorter array and compare with the longer array
+    for i in range(len(shorter_array)):
+        if abs(longer_array[i] - shorter_array[i]) > 1:
+            return i
+            
+    # If all elements in the shorter array match with the corresponding elements in the longer array,
+    # check if the last element of the longer array is greater than the last element of the shorter array
+    if longer_array[-1] - shorter_array[-1] > 1:
+        return len(shorter_array)
+    
+    # If both arrays match, return -1
+    return -1
+
 def fix_tdt_names(string, append): 
   # if the epocs have less than 3 letters, they would be stored as
   # "PC0/" but can only be accessed using "PC0_" on the dict
@@ -61,25 +82,25 @@ console.info(f"Duration difference: block info - tdt sent epocs = {block.info.du
 console.info(f"TDT sent: {len(tdt_pulse_onset)} pulses")
 console.info(f"Bonsai received: {len(pulse_onset)} pulses")
 
-if len(tdt_pulse_onset) != len(pulse_onset):
-  console.warn(f"It seems that the number of pulses on each recording is not equal", severe = True)
-  # This should find the places where 
-  # we do aq_freq + 2 to be safe from off by one errors. We are looking for big jumps
-  jumps = np.where(np.diff(pulse_onset, prepend=0) > config['aq_freq_hz'] + 2)[0]
-  # the first jump should be at idx zero
-  alignment_idx = jumps[1]
-  console.info(f'Found jumps in `pulse_onset` at idx: {jumps}. Trying to align with first jump.')
-  if len(pulse_onset[alignment_idx:]) == len(tdt_pulse_onset):
-    console.info(f'Aligment successful using new idx at {alignment_idx}')
-    eeg_t0_sec = pulse_onset[alignment_idx] / config['aq_freq_hz']
-  else:
-    console.error(f"Could not aling the data. Please check it manually", severe=True)
-    sys.exit(0)
-else:
-  console.success(f"Lengths match on both recordings, aligning to first event")
-  # If everything checks out 
-  alignment_idx = 0
-  eeg_t0_sec = pulse_onset[alignment_idx] / config['aq_freq_hz']
+#if len(tdt_pulse_onset) != len(pulse_onset):
+#  console.warn(f"It seems that the number of pulses on each recording is not equal", severe = True)
+#  # This should find the places where 
+#  # we do aq_freq + 2 to be safe from off by one errors. We are looking for big jumps
+#  jumps = np.where(np.diff(pulse_onset, prepend=0) > config['aq_freq_hz'] + 2)[0]
+#  console.info(f'Found jumps in `pulse_onset` at idx: {jumps}. Trying to align with first jump.')
+#  # the first jump should be at idx zero
+#  alignment_idx = jumps[1]
+#  if len(pulse_onset[alignment_idx:]) == len(tdt_pulse_onset):
+#    console.info(f'Aligment successful using new idx at {alignment_idx}')
+#    eeg_t0_sec = pulse_onset[alignment_idx] / config['aq_freq_hz']
+#  else:
+#    console.error(f"Could not aling the data. Please check it manually", severe=True)
+#    sys.exit(0)
+#else:
+#  console.success(f"Lengths match on both recordings, aligning to first event")
+#  # If everything checks out 
+alignment_idx = 0
+eeg_t0_sec = pulse_onset[alignment_idx] / config['aq_freq_hz']
 
 
 
