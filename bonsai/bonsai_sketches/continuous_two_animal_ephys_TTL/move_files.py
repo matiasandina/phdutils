@@ -27,6 +27,20 @@ directory_to_watch = config["directory_to_watch"]
 box1_directory = os.path.join(database_path, box1_id)
 box2_directory = os.path.join(database_path, box2_id)
 
+# Function to get new directory name
+def get_new_dir_name(box_id):
+    new_id = input(f"The directory for `{box_id}` already exists.\n>> Please enter a new id or press enter to use the old one: ")
+    return new_id if new_id else box_id
+
+# Check if the directories already exist
+if os.path.exists(box1_directory):
+    box1_id = get_new_dir_name(box1_id)
+    box1_directory = os.path.join(database_path, box1_id)
+
+if os.path.exists(box2_directory):
+    box2_id = get_new_dir_name(box2_id)
+    box2_directory = os.path.join(database_path, box2_id)
+
 
 def rename_file(destination_folder, file_path, box_id, timestamp):
     """
