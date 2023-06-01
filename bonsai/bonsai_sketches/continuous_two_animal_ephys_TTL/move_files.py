@@ -71,7 +71,7 @@ def rename_file(destination_folder, file_path, box_id, timestamp):
     # Rename and move the file
     os.rename(file_path, new_file_path)
     spinner.color = "green"
-    spinner.write(f"✔ Renamed and moved {file_path} to {new_file_path}")
+    spinner.write(f"✔ Renamed and moved {file_name} to {new_file_path}")
     spinner.color = "white"
 
 def process_file(file_path):

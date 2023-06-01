@@ -1,0 +1,1 @@
+The purpose of this sketch is to check the camera positioning and their indices before launching any other sketch that might start recording into disk on startup.
