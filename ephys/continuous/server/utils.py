@@ -32,6 +32,35 @@ def read_config(ephys_folder):
 def line_count(filename):
     return int(subprocess.check_output(['wc', '-l', filename]).split()[0])
 
+def chunk_file_list(file_list, expected_delta_min, discontinuity_tolerance):
+    """
+    Chunk the given file list based on discontinuity in timestamps.
+
+    Parameters:
+        file_list (list): List of file names.
+        expected_delta_min (int): Expected time difference between consecutive files in minutes.
+        discontinuity_tolerance (int): Tolerance for discontinuity in minutes.
+
+    Returns:
+        list: List of chunks, where each chunk contains continuous files based on timestamps.
+
+    """
+    # Extract timestamps from file names
+    timestamps = [re.search(r'\d{8}T\d{6}', file).group() for file in file_list]
+    # Convert timestamps to datetime objects
+    times = [datetime.strptime(timestamp, '%Y%m%dT%H%M%S') for timestamp in timestamps]
+    # Convert datetime objects to numeric timestamps
+    timestamps_numeric = [time.timestamp() for time in times]
+    # Calculate the discontinuity tolerance in minutes
+    discontinuity_tolerance_minutes = expected_delta_min + discontinuity_tolerance
+    # Calculate time differences between consecutive timestamps
+    time_diffs = np.diff(timestamps_numeric) / 60
+    # Find indices where time differences exceed the discontinuity tolerance
+    discontinuous_indices = np.where(time_diffs > discontinuity_tolerance_minutes)[0]
+    # Split the file list into chunks based on the discontinuous indices
+    chunks = np.split(file_list, discontinuous_indices + 1)
+    return chunks
+
 def find_channels(config, pattern):
   # np.char.find will return -1 if pattern not found#
   # we ask for anything other than that to make it boolean
