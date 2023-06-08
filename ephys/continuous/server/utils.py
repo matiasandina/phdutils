@@ -8,6 +8,7 @@ import glob
 import datetime
 from rlist_files.list_files import list_files
 import subprocess
+import re
 
 def read_yaml(filename):
   with open(filename, "r") as ymlfile:

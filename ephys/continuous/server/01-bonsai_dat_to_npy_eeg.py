@@ -13,7 +13,7 @@ from rlist_files import list_files
 import polars as pl
 import argparse
 import datetime
-
+import re
 # Create an argument parser
 parser = argparse.ArgumentParser(description='This script reads all _eeg.bin in a folder and binds them together')
 
