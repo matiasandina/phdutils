@@ -63,8 +63,10 @@ def chunk_file_list(file_list, expected_delta_min, discontinuity_tolerance):
     return chunks
 
 def read_stack_chunks(file_chunk, num_channels):
+  num_files = len(file_chunk)
+  combined_data = [None] * num_files
   for file_idx, file in enumerate(file_chunk):
-    num_files = len(file_chunk)
+    
     console.log(f"Read data from file {file} ({file_idx+1}/{num_files})")
     # data is stored as np.float32
     eeg_array = np.fromfile(file, dtype=np.float32)
@@ -85,18 +87,20 @@ def read_stack_chunks(file_chunk, num_channels):
     #  console.success(f"Saving camera frames as {outfile}")
     #  np.save(outfile, cam_array)
 
-    if file_idx == 0:
+    #if file_idx == 0:
         # For the first file, initialize combined_data with the shape of eeg_array
-        combined_data = np.expand_dims(eeg_array, axis=0)
-    else: 
+        # concat enforces same dimensions in all arrays
+        #combined_data = np.expand_dims(eeg_array, axis=0)
+    #else: 
         # For subsequent files, expand dimensions of eeg_array before concatenating with combined_data
-        combined_data = np.concatenate((combined_data, np.expand_dims(eeg_array, axis=0)), axis=0)
-
-  console.log(f"Combined Data has the shape (files, channels, timepoints): {combined_data.shape}")
+        #combined_data = np.concatenate((combined_data, np.expand_dims(eeg_array, axis=0)), axis=0)
+      # combine data into the proper place
+      combined_data[file_idx] = eeg_array
+  #console.log(f"Combined Data has the shape (files, channels, timepoints): {combined_data.shape}")
 
   # Stack files belonging to a chunk horizontally
-  console.info("Stacking data horizontally")
   combined_data = np.hstack(combined_data)
+  console.info(f"Stacked data horizontally into {combined_data.shape}")
   return combined_data
 
 def filter_data(data, config, save=False, outpath = None):
