@@ -49,7 +49,7 @@ def chunk_file_list(file_list, expected_delta_min, discontinuity_tolerance):
     # Extract timestamps from file names
     timestamps = [re.search(r'\d{8}T\d{6}', file).group() for file in file_list]
     # Convert timestamps to datetime objects
-    times = [datetime.strptime(timestamp, '%Y%m%dT%H%M%S') for timestamp in timestamps]
+    times = [datetime.datetime.strptime(timestamp, '%Y%m%dT%H%M%S') for timestamp in timestamps]
     # Convert datetime objects to numeric timestamps
     timestamps_numeric = [time.timestamp() for time in times]
     # Calculate the discontinuity tolerance in minutes
