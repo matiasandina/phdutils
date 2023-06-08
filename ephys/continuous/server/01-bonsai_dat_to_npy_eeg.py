@@ -75,7 +75,7 @@ discontinuity_tolerance = 5
 chunks = chunk_file_list(file_list, expected_delta_min, discontinuity_tolerance)
 
 for chunk_idx, chunk in enumerate(chunks):
-  console.log(f"Working on chunk {chunk_idx}/{len(chunk_idx)}")
+  console.log(f"Working on chunk {chunk_idx}/{len(chunks)}")
   # Iterate over the files and combine data
   combined_data = read_stack_chunks(chunk)
   # bandpass filter data
