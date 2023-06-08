@@ -119,7 +119,7 @@ def filter_data(data, config, save=False, outpath = None):
     console.success(f"Found EMG channels at idx {emg_channels}.")
 
   # we will not filter emg_channels
-  eeg_filter_idx = [i for i in range(eeg_array.shape[0]) if i not in emg_channels]
+  eeg_filter_idx = [i for i in range(data.shape[0]) if i not in emg_channels]
 
   # filter eegs
   filtered_data = mne.filter.filter_data(data.astype('float64'), 
