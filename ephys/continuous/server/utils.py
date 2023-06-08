@@ -105,6 +105,7 @@ def read_stack_chunks(file_chunk, num_channels):
   return combined_data
 
 def filter_data(data, config, save=False, outpath = None):
+  f_aq = config["aq_freq_hz"]
   # Filtering
   channel_map = create_channel_map(data, config)
   # create filtered and raw array
