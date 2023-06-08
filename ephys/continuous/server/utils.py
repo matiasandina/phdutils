@@ -62,7 +62,7 @@ def chunk_file_list(file_list, expected_delta_min, discontinuity_tolerance):
     chunks = np.split(file_list, discontinuous_indices + 1)
     return chunks
 
-def read_stack_chunks(file_chunk):
+def read_stack_chunks(file_chunk, num_channels):
   for file_idx, file in enumerate(file_chunk):
     num_files = len(file_chunk)
     console.log(f"Read data from file {file} ({file_idx+1}/{num_files})")
