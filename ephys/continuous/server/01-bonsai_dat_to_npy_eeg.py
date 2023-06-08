@@ -14,7 +14,7 @@ import polars as pl
 import argparse
 
 # Create an argument parser
-parser = argparse.ArgumentParser(description='This script reads all _eeg.bin in a folder and binds them together'.)
+parser = argparse.ArgumentParser(description='This script reads all _eeg.bin in a folder and binds them together')
 
 # Add arguments for ephys_folder and config_folder
 parser.add_argument('--ephys_folder', help='Path to the ephys folder')
