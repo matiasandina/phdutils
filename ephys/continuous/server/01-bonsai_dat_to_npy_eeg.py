@@ -67,7 +67,7 @@ num_files = len(file_list)
 #
 ## Chunk the file list
 bonsai_timer_period = datetime.datetime.strptime(config["bonsai_timer_period"], "%H:%M:%S")
-expected_delta_sec = timedelta(hours = bonsai_timer_period.hour, minutes= bonsai_timer_period.minute, seconds = bonsai_timer_period.second).total_seconds()
+expected_delta_sec = datetime.datetime.timedelta(hours = bonsai_timer_period.hour, minutes= bonsai_timer_period.minute, seconds = bonsai_timer_period.second).total_seconds()
 expected_delta_min = expected_delta_sec / 60
 # in minutes
 discontinuity_tolerance = 5
