@@ -95,7 +95,7 @@ def read_stack_chunks(file_chunk, num_channels):
         # For subsequent files, expand dimensions of eeg_array before concatenating with combined_data
         #combined_data = np.concatenate((combined_data, np.expand_dims(eeg_array, axis=0)), axis=0)
       # combine data into the proper place
-      combined_data[file_idx] = eeg_array
+    combined_data[file_idx] = eeg_array
   #console.log(f"Combined Data has the shape (files, channels, timepoints): {combined_data.shape}")
 
   # Stack files belonging to a chunk horizontally
