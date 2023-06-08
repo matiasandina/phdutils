@@ -61,6 +61,87 @@ def chunk_file_list(file_list, expected_delta_min, discontinuity_tolerance):
     chunks = np.split(file_list, discontinuous_indices + 1)
     return chunks
 
+def read_stack_chunks(file_chunk):
+  for file_idx, file in enumerate(file_chunk):
+    console.log(f"Read data from file {file} ({file_idx+1}/{num_files})")
+    # data is stored as np.float32
+    eeg_array = np.fromfile(file, dtype=np.float32)
+    # first integer division, then blowup.
+    n_samples_all_channels = eeg_array.shape[0] // num_channels
+    console.info(f"Reading all dataset. Reshaping and transposing into {num_channels, n_samples_all_channels}")
+    # subset and reshape
+    eeg_array = eeg_array.reshape(n_samples_all_channels, num_channels).T
+
+    # remove camera stamp if present
+    #if has_camera:
+    #  cam_index = np.where(['cam' in value for value in list(channel_map.values())])
+    #  cam_array = eeg_array[cam_index[0], :]
+    #  eeg_array = np.delete(eeg_array, cam_index, axis=0)
+    #  # save camera
+    #  suffix = f"_camframes.npy"
+    #  outfile = os.path.join(ephys_folder, f"{Path(eeg_file).stem}{suffix}")
+    #  console.success(f"Saving camera frames as {outfile}")
+    #  np.save(outfile, cam_array)
+
+    if file_idx == 0:
+        # For the first file, initialize combined_data with the shape of eeg_array
+        combined_data = np.expand_dims(eeg_array, axis=0)
+    else: 
+        # For subsequent files, expand dimensions of eeg_array before concatenating with combined_data
+        combined_data = np.concatenate((combined_data, np.expand_dims(eeg_array, axis=0)), axis=0)
+
+  console.log(f"Combined Data has the shape (files, channels, timepoints): {combined_data.shape}")
+
+  # Stack files belonging to a chunk horizontally
+  console.info("Stacking data horizontally")
+  combined_data = np.hstack(combined_data)
+  return combined_data
+
+def filter_data(data, config, save=False, outpath = None):
+  # Filtering
+  channel_map = create_channel_map(data, config)
+  # create filtered and raw array
+  bandpass_freqs = config['bandpass']['eeg']
+  emg_bandpass = config['bandpass']['emg']
+  # find the emg channels
+  emg_channels = find_channels(config, "EMG")
+
+  if emg_channels is None:
+    console.error("Indices for EMG Channels not found in channel map before filtering.\nCheck your data!\nExiting program.", severe=True)
+    sys.exit(0)
+  else:
+    console.success(f"Found EMG channels at idx {emg_channels}.")
+
+  # we will not filter emg_channels
+  eeg_filter_idx = [i for i in range(eeg_array.shape[0]) if i not in emg_channels]
+
+  # filter eegs
+  filtered_data = mne.filter.filter_data(data.astype('float64'), 
+                                    sfreq = f_aq, 
+                                    l_freq = min(bandpass_freqs), 
+                                    h_freq = max(bandpass_freqs), 
+                                    picks = eeg_filter_idx,
+                                    verbose=0, n_jobs=2)
+
+  # filter emgs
+  filtered_data = mne.filter.filter_data(filtered_data, 
+                                    sfreq = f_aq, 
+                                    l_freq = min(emg_bandpass), 
+                                    h_freq = max(emg_bandpass), 
+                                    picks = emg_channels,
+                                    verbose=0, n_jobs=2)
+
+  if save:
+    assert outpath is not None, "outpath is mising, cannot save"
+    # Save output from filtering_script
+    #suffix = f"_desc-filt-{min(bandpass_freqs)}-{max(bandpass_freqs)}_eeg.npy"
+    #outfile = os.path.join(ephys_folder, f"{Path(eeg_file).stem}{suffix}")
+    console.success(f"Saving eegdata as {outpath}")
+    np.save(outpath, filtered_data.astype('float32'))
+
+  return filtered_data
+
+
 def find_channels(config, pattern):
   # np.char.find will return -1 if pattern not found#
   # we ask for anything other than that to make it boolean
