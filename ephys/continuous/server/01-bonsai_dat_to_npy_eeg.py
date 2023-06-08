@@ -14,6 +14,8 @@ import polars as pl
 import argparse
 import datetime
 import re
+from scipy.signal import decimate
+
 # Create an argument parser
 parser = argparse.ArgumentParser(description='This script reads all _eeg.bin in a folder and binds them together')
 
