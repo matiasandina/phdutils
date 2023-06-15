@@ -58,19 +58,18 @@ def rename_file(destination_folder, file_path, box_id, timestamp):
     match file_name:
         case f if f.startswith("box") and "eegdata" in base_name:
             new_file_name = f"sub-{box_id}_ses-{timestamp}_eeg{extension}"
-            destination_folder = os.path.join(database_path, box_id, "eeg")
+            destination_folder = os.path.join(destination_folder, "eeg")
         case f if f.startswith("box") and "vid" in base_name:
             new_file_name = f"sub-{box_id}_ses-{timestamp}_video{extension}"
-            destination_folder = os.path.join(database_path, box_id, "video")
+            destination_folder = os.path.join(destination_folder, "video")
         case f if f.startswith("box"):
             new_file_name = f"sub-{box_id}_ses-{timestamp}_{base_name}{extension}"
-            destination_folder = os.path.join(database_path, box_id)
         case f if f.startswith("vid_timestamp"):
             new_file_name = f"sub-{box_id}_ses-{timestamp}_timestamp{extension}"
-            destination_folder = os.path.join(database_path, box_id, "video")
+            destination_folder = os.path.join(destination_folder, "video")
         case f if f.startswith("ttl_in_state"):
             new_file_name = f"sub-{box_id}_ses-{timestamp}_ttl_in{extension}"
-            destination_folder = os.path.join(database_path, box_id, "ttl")
+            destination_folder = os.path.join(destination_folder, "ttl")
         case _:
             print(f"Skipping {file_name} as it doesn't match any file type.")
             return
