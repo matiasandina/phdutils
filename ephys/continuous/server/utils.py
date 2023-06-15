@@ -8,6 +8,8 @@ import glob
 import datetime
 from rlist_files.list_files import list_files
 import subprocess
+import re
+import mne
 
 def read_yaml(filename):
   with open(filename, "r") as ymlfile:
@@ -31,6 +33,122 @@ def read_config(ephys_folder):
 
 def line_count(filename):
     return int(subprocess.check_output(['wc', '-l', filename]).split()[0])
+
+def chunk_file_list(file_list, expected_delta_min, discontinuity_tolerance):
+    """
+    Chunk the given file list based on discontinuity in timestamps.
+
+    Parameters:
+        file_list (list): List of file names.
+        expected_delta_min (int): Expected time difference between consecutive files in minutes.
+        discontinuity_tolerance (int): Tolerance for discontinuity in minutes.
+
+    Returns:
+        list: List of chunks, where each chunk contains continuous files based on timestamps.
+
+    """
+    # Extract timestamps from file names
+    timestamps = [re.search(r'\d{8}T\d{6}', file).group() for file in file_list]
+    # Convert timestamps to datetime objects
+    times = [datetime.datetime.strptime(timestamp, '%Y%m%dT%H%M%S') for timestamp in timestamps]
+    # Convert datetime objects to numeric timestamps
+    timestamps_numeric = [time.timestamp() for time in times]
+    # Calculate the discontinuity tolerance in minutes
+    discontinuity_tolerance_minutes = expected_delta_min + discontinuity_tolerance
+    # Calculate time differences between consecutive timestamps
+    time_diffs = np.diff(timestamps_numeric) / 60
+    # Find indices where time differences exceed the discontinuity tolerance
+    discontinuous_indices = np.where(time_diffs > discontinuity_tolerance_minutes)[0]
+    # Split the file list into chunks based on the discontinuous indices
+    chunks = np.split(file_list, discontinuous_indices + 1)
+    return chunks
+
+def read_stack_chunks(file_chunk, num_channels):
+  num_files = len(file_chunk)
+  combined_data = [None] * num_files
+  for file_idx, file in enumerate(file_chunk):
+    
+    console.log(f"Read data from file {file} ({file_idx+1}/{num_files})")
+    # data is stored as np.float32
+    eeg_array = np.fromfile(file, dtype=np.float32)
+    # first integer division, then blowup.
+    n_samples_all_channels = eeg_array.shape[0] // num_channels
+    console.info(f"Reading all dataset. Reshaping and transposing into {num_channels, n_samples_all_channels}")
+    # subset and reshape
+    eeg_array = eeg_array.reshape(n_samples_all_channels, num_channels).T
+
+    # remove camera stamp if present
+    #if has_camera:
+    #  cam_index = np.where(['cam' in value for value in list(channel_map.values())])
+    #  cam_array = eeg_array[cam_index[0], :]
+    #  eeg_array = np.delete(eeg_array, cam_index, axis=0)
+    #  # save camera
+    #  suffix = f"_camframes.npy"
+    #  outfile = os.path.join(ephys_folder, f"{Path(eeg_file).stem}{suffix}")
+    #  console.success(f"Saving camera frames as {outfile}")
+    #  np.save(outfile, cam_array)
+
+    #if file_idx == 0:
+        # For the first file, initialize combined_data with the shape of eeg_array
+        # concat enforces same dimensions in all arrays
+        #combined_data = np.expand_dims(eeg_array, axis=0)
+    #else: 
+        # For subsequent files, expand dimensions of eeg_array before concatenating with combined_data
+        #combined_data = np.concatenate((combined_data, np.expand_dims(eeg_array, axis=0)), axis=0)
+      # combine data into the proper place
+    combined_data[file_idx] = eeg_array
+  #console.log(f"Combined Data has the shape (files, channels, timepoints): {combined_data.shape}")
+
+  # Stack files belonging to a chunk horizontally
+  combined_data = np.hstack(combined_data)
+  console.info(f"Stacked data horizontally into {combined_data.shape}")
+  return combined_data
+
+def filter_data(data, config, save=False, outpath = None):
+  f_aq = config["aq_freq_hz"]
+  # Filtering
+  channel_map = create_channel_map(data, config)
+  # create filtered and raw array
+  bandpass_freqs = config['bandpass']['eeg']
+  emg_bandpass = config['bandpass']['emg']
+  # find the emg channels
+  emg_channels = find_channels(config, "EMG")
+
+  if emg_channels is None:
+    console.error("Indices for EMG Channels not found in channel map before filtering.\nCheck your data!\nExiting program.", severe=True)
+    sys.exit(0)
+  else:
+    console.success(f"Found EMG channels at idx {emg_channels}.")
+
+  # we will not filter emg_channels
+  eeg_filter_idx = [i for i in range(data.shape[0]) if i not in emg_channels]
+
+  # filter eegs
+  filtered_data = mne.filter.filter_data(data.astype('float64'), 
+                                    sfreq = f_aq, 
+                                    l_freq = min(bandpass_freqs), 
+                                    h_freq = max(bandpass_freqs), 
+                                    picks = eeg_filter_idx,
+                                    verbose=0, n_jobs=2)
+
+  # filter emgs
+  filtered_data = mne.filter.filter_data(filtered_data, 
+                                    sfreq = f_aq, 
+                                    l_freq = min(emg_bandpass), 
+                                    h_freq = max(emg_bandpass), 
+                                    picks = emg_channels,
+                                    verbose=0, n_jobs=2)
+
+  if save:
+    assert outpath is not None, "outpath is mising, cannot save"
+    # Save output from filtering_script
+    #suffix = f"_desc-filt-{min(bandpass_freqs)}-{max(bandpass_freqs)}_eeg.npy"
+    #outfile = os.path.join(ephys_folder, f"{Path(eeg_file).stem}{suffix}")
+    console.success(f"Saving eegdata as {outpath}")
+    np.save(outpath, filtered_data.astype('float32'))
+
+  return filtered_data
+
 
 def find_channels(config, pattern):
   # np.char.find will return -1 if pattern not found#
