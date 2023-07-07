@@ -251,49 +251,55 @@
             <Expression xsi:type="SubscribeSubject">
               <Name>VidBox1</Name>
             </Expression>
-            <Expression xsi:type="Combinator">
-              <Combinator xsi:type="cv:VideoWriter">
-                <cv:FileName>box1_vid.avi</cv:FileName>
-                <cv:Suffix>Timestamp</cv:Suffix>
-                <cv:Buffered>true</cv:Buffered>
-                <cv:Overwrite>false</cv:Overwrite>
-                <cv:FourCC>FMP4</cv:FourCC>
-                <cv:FrameRate>30</cv:FrameRate>
-                <cv:FrameSize>
-                  <cv:Width>0</cv:Width>
-                  <cv:Height>0</cv:Height>
-                </cv:FrameSize>
-                <cv:ResizeInterpolation>NearestNeighbor</cv:ResizeInterpolation>
-              </Combinator>
+            <Expression xsi:type="Disable">
+              <Builder xsi:type="Combinator">
+                <Combinator xsi:type="cv:VideoWriter">
+                  <cv:FileName>box1_vid.avi</cv:FileName>
+                  <cv:Suffix>Timestamp</cv:Suffix>
+                  <cv:Buffered>true</cv:Buffered>
+                  <cv:Overwrite>false</cv:Overwrite>
+                  <cv:FourCC>FMP4</cv:FourCC>
+                  <cv:FrameRate>30</cv:FrameRate>
+                  <cv:FrameSize>
+                    <cv:Width>0</cv:Width>
+                    <cv:Height>0</cv:Height>
+                  </cv:FrameSize>
+                  <cv:ResizeInterpolation>NearestNeighbor</cv:ResizeInterpolation>
+                </Combinator>
+              </Builder>
             </Expression>
             <Expression xsi:type="SubscribeSubject">
               <Name>VidBox2</Name>
             </Expression>
-            <Expression xsi:type="Combinator">
-              <Combinator xsi:type="cv:VideoWriter">
-                <cv:FileName>box2_vid.avi</cv:FileName>
-                <cv:Suffix>Timestamp</cv:Suffix>
-                <cv:Buffered>true</cv:Buffered>
-                <cv:Overwrite>false</cv:Overwrite>
-                <cv:FourCC>FMP4</cv:FourCC>
-                <cv:FrameRate>30</cv:FrameRate>
-                <cv:FrameSize>
-                  <cv:Width>0</cv:Width>
-                  <cv:Height>0</cv:Height>
-                </cv:FrameSize>
-                <cv:ResizeInterpolation>NearestNeighbor</cv:ResizeInterpolation>
-              </Combinator>
+            <Expression xsi:type="Disable">
+              <Builder xsi:type="Combinator">
+                <Combinator xsi:type="cv:VideoWriter">
+                  <cv:FileName>box2_vid.avi</cv:FileName>
+                  <cv:Suffix>Timestamp</cv:Suffix>
+                  <cv:Buffered>true</cv:Buffered>
+                  <cv:Overwrite>false</cv:Overwrite>
+                  <cv:FourCC>FMP4</cv:FourCC>
+                  <cv:FrameRate>30</cv:FrameRate>
+                  <cv:FrameSize>
+                    <cv:Width>0</cv:Width>
+                    <cv:Height>0</cv:Height>
+                  </cv:FrameSize>
+                  <cv:ResizeInterpolation>NearestNeighbor</cv:ResizeInterpolation>
+                </Combinator>
+              </Builder>
             </Expression>
             <Expression xsi:type="SubscribeSubject">
               <Name>TTL_IN</Name>
             </Expression>
-            <Expression xsi:type="Combinator">
-              <Combinator xsi:type="dsp:MatrixWriter">
-                <dsp:Path>ttl_in_state.bin</dsp:Path>
-                <dsp:Suffix>Timestamp</dsp:Suffix>
-                <dsp:Overwrite>false</dsp:Overwrite>
-                <dsp:Layout>ColumnMajor</dsp:Layout>
-              </Combinator>
+            <Expression xsi:type="Disable">
+              <Builder xsi:type="Combinator">
+                <Combinator xsi:type="dsp:MatrixWriter">
+                  <dsp:Path>ttl_in_state.bin</dsp:Path>
+                  <dsp:Suffix>Timestamp</dsp:Suffix>
+                  <dsp:Overwrite>false</dsp:Overwrite>
+                  <dsp:Layout>ColumnMajor</dsp:Layout>
+                </Combinator>
+              </Builder>
             </Expression>
             <Expression xsi:type="SubscribeSubject">
               <Name>Amplifier</Name>
@@ -376,13 +382,15 @@
                 </Edges>
               </Workflow>
             </Expression>
-            <Expression xsi:type="Combinator">
-              <Combinator xsi:type="dsp:MatrixWriter">
-                <dsp:Path>box1_eegdata.bin</dsp:Path>
-                <dsp:Suffix>Timestamp</dsp:Suffix>
-                <dsp:Overwrite>true</dsp:Overwrite>
-                <dsp:Layout>ColumnMajor</dsp:Layout>
-              </Combinator>
+            <Expression xsi:type="Disable">
+              <Builder xsi:type="Combinator">
+                <Combinator xsi:type="dsp:MatrixWriter">
+                  <dsp:Path>box1_eegdata.bin</dsp:Path>
+                  <dsp:Suffix>Timestamp</dsp:Suffix>
+                  <dsp:Overwrite>true</dsp:Overwrite>
+                  <dsp:Layout>ColumnMajor</dsp:Layout>
+                </Combinator>
+              </Builder>
             </Expression>
             <Expression xsi:type="GroupWorkflow">
               <Name>SelectBox2</Name>
@@ -461,24 +469,28 @@
                 </Edges>
               </Workflow>
             </Expression>
-            <Expression xsi:type="Combinator">
-              <Combinator xsi:type="dsp:MatrixWriter">
-                <dsp:Path>box2_eegdata.bin</dsp:Path>
-                <dsp:Suffix>Timestamp</dsp:Suffix>
-                <dsp:Overwrite>true</dsp:Overwrite>
-                <dsp:Layout>ColumnMajor</dsp:Layout>
-              </Combinator>
+            <Expression xsi:type="Disable">
+              <Builder xsi:type="Combinator">
+                <Combinator xsi:type="dsp:MatrixWriter">
+                  <dsp:Path>box2_eegdata.bin</dsp:Path>
+                  <dsp:Suffix>Timestamp</dsp:Suffix>
+                  <dsp:Overwrite>true</dsp:Overwrite>
+                  <dsp:Layout>ColumnMajor</dsp:Layout>
+                </Combinator>
+              </Builder>
             </Expression>
             <Expression xsi:type="SubscribeSubject">
               <Name>AmpCounter</Name>
             </Expression>
-            <Expression xsi:type="Combinator">
-              <Combinator xsi:type="dsp:MatrixWriter">
-                <dsp:Path>vid_timestamp.bin</dsp:Path>
-                <dsp:Suffix>Timestamp</dsp:Suffix>
-                <dsp:Overwrite>false</dsp:Overwrite>
-                <dsp:Layout>ColumnMajor</dsp:Layout>
-              </Combinator>
+            <Expression xsi:type="Disable">
+              <Builder xsi:type="Combinator">
+                <Combinator xsi:type="dsp:MatrixWriter">
+                  <dsp:Path>vid_timestamp.bin</dsp:Path>
+                  <dsp:Suffix>Timestamp</dsp:Suffix>
+                  <dsp:Overwrite>false</dsp:Overwrite>
+                  <dsp:Layout>ColumnMajor</dsp:Layout>
+                </Combinator>
+              </Builder>
             </Expression>
           </Nodes>
           <Edges>
