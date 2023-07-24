@@ -1,0 +1,5 @@
+box1: MLA120 # the ID you want to assing to animal in box 1
+box2: MLA121 # the ID you want to assing to animal in box 2
+period: 01:00:00 # The period used on the bonsai Timer node
+database_path: C:\Users\choilab\raw_data\ # The root path where files will be moved to
+directory_to_watch: C:\Users\choilab\phdutils\bonsai\bonsai_sketches\continuous_two_animal_ephys_TTL # The path where bonsai will save files to
