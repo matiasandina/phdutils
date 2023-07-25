@@ -23,7 +23,7 @@ n_trials = 500
 # This goes into Period1
 trial_period_ms = 120 * 1000
 # This goes into Width1
-trial_width_ms = trial_period_ms - 0.1 # can't be 100% duty cycle
+trial_width_ms = trial_period_ms - 500 # can't be 100% duty cycle
 # This goes into Period2
 stim_period_ms = 5 * 1000
 # This goes into Width2 <- we want to change this width to increase the duty cycle and have less time off stim
