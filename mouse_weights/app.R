@@ -17,7 +17,8 @@ plot_weight_data <- function(mouse_data){
     )
   ) +
     geom_line(alpha = 0.5) +
-    ggtitle("Mouse weight over time")
+    ggtitle("Mouse weight over time") +
+    theme_linedraw()
 }
 
 
@@ -107,6 +108,8 @@ server <- function(input, output, session) {
     if(inherits(input$folder, 'list')) {
       folder_path <- parseDirPath(c(home = normalizePath("~")), input$folder)
       selected_folder(folder_path)
+      animal_id_value <- basename(folder_path)
+      animal_id(animal_id_value)
       folderSelected(TRUE)
     }
   })
@@ -174,7 +177,7 @@ server <- function(input, output, session) {
     animal_id <- basename(folder_path)
     save_name <- glue::glue("sub-{animal_id}_weights.csv")
     save_path <- file.path(folder_path, save_name)
-    readr::write_csv(mouse_data, save_path)
+    readr::write_csv(mouse_data(), save_path)
     shinyalert::shinyalert("Success", paste("Data saved to", save_path), type = "success")
   })
   
@@ -188,7 +191,6 @@ server <- function(input, output, session) {
     animal_id <- animal_id()
     # This is already POSIXct in UTC
     datetime <- input$dateTimeInput
-    
     # Check for duplicate datetime for this id
     if (any(mouse_data()$id == animal_id & mouse_data()$datetime == datetime)) {
       shinyalert::shinyalert("Error", "This datetime is already recorded for this animal. Please choose another datetime.", type = "error")
@@ -205,16 +207,21 @@ server <- function(input, output, session) {
     updated_data <- dplyr::bind_rows(mouse_data(), new_entry)
     mouse_data(updated_data) # Update reactive value
     
-    output$dataTable <- renderDT({
-      datatable(mouse_data())
+    output$dataTable <- DT::renderDT({
+      pre <- mouse_data() %>% dplyr::select(id, datetime, everything())
+      DT::datatable(pre) %>%
+        # format utc_datetime in locale string instead of Z time ("toISOString")
+        formatDate(2, "toLocaleString")
     })
-    p <- plot_weight_data(mouse_data())
-    output$linePlots <- renderPlot({p})
+    if (nrow(mouse_data()) > 2) {
+      p <- plot_weight_data(mouse_data())
+      output$linePlots <- renderPlot({p})
+    }
   })
   
   
   output$linePlots <- renderPlot({
-    if(nrow(mouse_data()) < 2) {
+    if (nrow(mouse_data()) < 2) {
       return("Less than two datapoints; graph will not be plotted.")
     } else {
       plot_weight_data(mouse_data())
