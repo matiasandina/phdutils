@@ -48,8 +48,9 @@ ui <- navbarPage(
         card_body_fill(
           shinyFilesButton('loadFileButton', 'Load Previous Data', title='Please choose a file', multiple=F, buttonType='default'),
           #fileInput("loadFile", "Load Previous Data", accept = c('.csv')),
-          shinyDirButton('folder', 'Create New Data directory', 'Upload'),
+          shinyDirButton('folder', 'Select/Create New Data directory', 'Upload'),
           verbatimTextOutput("folder_text"),
+          verbatimTextOutput('mouse_id', placeholder = T),
           numericInput(
             inputId = "weightInput",
             label = "Enter Weight (gr)",
@@ -120,6 +121,12 @@ server <- function(input, output, session) {
     } else {
       shinyjs::disable("submitButton")
     }
+  })
+  
+  observeEvent(animal_id(),{
+    output$mouse_id <- renderText({
+      paste("Animal ID is:", animal_id())
+    })
   })
 
   observe({
@@ -197,6 +204,11 @@ server <- function(input, output, session) {
       return()
     }
     
+    if (input$weightInput == 0){
+      shinyalert::shinyalert("Error", "Weight must be more than zero grams")
+      return()
+    }
+    
     new_entry <- tibble(
       id = animal_id,
       datetime = datetime,
@@ -217,6 +229,8 @@ server <- function(input, output, session) {
       p <- plot_weight_data(mouse_data())
       output$linePlots <- renderPlot({p})
     }
+    # Clean the weight
+    updateNumericInput(session, "weightInput", value = 0)
   })
   
   
