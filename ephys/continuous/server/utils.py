@@ -63,14 +63,14 @@ def chunk_file_list(file_list, expected_delta_min, discontinuity_tolerance):
     chunks = np.split(file_list, discontinuous_indices + 1)
     return chunks
 
-def read_stack_chunks(file_chunk, num_channels):
+def read_stack_chunks(file_chunk, num_channels, dtype=np.float32):
   num_files = len(file_chunk)
   combined_data = [None] * num_files
   for file_idx, file in enumerate(file_chunk):
     
     console.log(f"Read data from file {file} ({file_idx+1}/{num_files})")
     # data is stored as np.float32
-    eeg_array = np.fromfile(file, dtype=np.float32)
+    eeg_array = np.fromfile(file, dtype=dtype)
     # first integer division, then blowup.
     n_samples_all_channels = eeg_array.shape[0] // num_channels
     console.info(f"Reading all dataset. Reshaping and transposing into {num_channels, n_samples_all_channels}")
