@@ -1,14 +1,99 @@
+import numpy as np
+import subprocess
 import os
 import yaml
 import sys
 from py_console import console
 from pathlib import Path
-import numpy as np
-import pandas as pd
+from utils import *
+from rlist_files import list_files
 # photometry sync
 import tdt
 import phototdt
-from utils import *
+from pathlib import Path
+import argparse
+# filtering
+import mne
+from mne.io import RawArray
+import polars as pl
+from scipy.signal import decimate
+
+
+# Create an argument parser
+parser = argparse.ArgumentParser(description='This script reads all _eeg.bin in a folder and binds them together')
+
+# Add arguments for ephys_folder and config_folder
+parser.add_argument('--session_folder', help='Path to the session folder (ending in yyyy-mm-dd)')
+parser.add_argument('--config_folder', help='Path to the config folder')
+
+# Parse the command-line arguments
+args = parser.parse_args()
+
+# Check if ephys_folder argument is provided, otherwise prompt the user
+if args.session_folder:
+    ephys_folder = args.session_folder
+else:
+    print("Choose any EEG file")
+    eeg_file = ui_find_file(title="Choose any EEG file", initialdir=os.path.expanduser("~"))
+    ephys_folder = os.path.dirname(eeg_file)
+
+# Check if config_folder argument is provided, otherwise use ephys_folder
+if args.config_folder:
+    config_folder = args.config_folder
+else:
+    config_folder = ephys_folder
+
+# Now you can use ephys_folder and config_folder in your script
+console.info(f"Finding configs in {config_folder}")
+config = read_config(config_folder)
+subject_id = config["subject_id"]
+console.info(f"Finding TTLs in {ephys_folder}")
+# list the ttl files
+ttl_files = list_files(os.path.join(ephys_folder, "ttl"), pattern = ".bin", full_names = True)
+num_channels = len(config['ttl_names'])
+# ttl data comes demultiplexed in ColumMajor
+# dtype for ttl it's np.int8
+ttl_array = read_stack_chunks(ttl_files, num_channels, dtype=np.int8)
+# normalize so max values go from 1, 2, 3, 4, 5, 6, 7, 8 to all being 1 
+ttl_array = normalize_ttl(ttl_array, method="max")
+console.success("TTL data read and normalized")
+# TODO: We might want to save the TTL it at some point, but not for now
+
+# We want to chunk the ephys data so that it matches the ttl_data
+# replace the ttl_in for eeg
+console.info('Finding Matching EEG files')
+matching_eeg_files = [val.replace("ttl_in", "eeg") for val in ttl_files]
+# replace the /ttl/ for /eeg/
+matching_eeg_files = [val.replace('/ttl/', '/eeg/') for val in matching_eeg_files]
+
+# Iterate over the files and combine data
+combined_data = read_stack_chunks(matching_eeg_files, len(config['selected_channels']), dtype = np.float32)
+# bandpass filter data
+filtered_data = filter_data(combined_data, config, save = False)
+# Downsample
+# 'fir' is super important, all else too slow and breaking
+if config['down_freq_hz'] is None:
+    console.info("No down_freq_hz in config. Exit without downsampling")
+    sys.exit()
+else:
+    assert config["aq_freq_hz"] > config["down_freq_hz"], f"{config['aq_freq_hz']} must be greater than {config['down_freq_hz']}"
+    downsample_factor = int(config["aq_freq_hz"]/config["down_freq_hz"])
+    console.info(f"Downsampling with factor {downsample_factor} from {config['aq_freq_hz']} into {config['down_freq_hz']} Hz")
+    data_down = decimate(combined_data, downsample_factor, ftype='fir')
+    channel_map = create_channel_map(data_down, config)
+    console.info(f"Provided channel map is {channel_map}")
+    eeg_df = pl.DataFrame(data_down.T, schema = channel_map)
+    # use the first timestamp of the session for each chunk
+    session_id = re.search(r'\d{8}T\d{6}', matching_eeg_files[0]).group()
+    outfilename = os.path.join(ephys_folder, f"sub-{subject_id}_ses-{session_id}_alignedeeg.csv.gz")
+    eeg_df.write_csv(outfilename)
+    console.success(f"Downsampled data written to {outfilename}")
+
+
+# -------------------------------------------- #
+# --------- Now we perform alignment --------- #
+# -------------------------------------------- #
+
 
 def find_mismatch(array1, array2):
     # Check which array is longer
@@ -41,16 +126,9 @@ def fix_tdt_names(string, append):
   else:
     return string
 
-
-console.log("Choose TTL file")
-ttl_file = ui_find_file(title="Choose TTL file", initialdir=os.path.expanduser("~"), file_type = "npy")
-ephys_folder = os.path.dirname(ttl_file)
-console.info(f"Working on {ephys_folder}")
-# find config
-config = read_config(ephys_folder)
-# Ask for TDT photometry data
-console.log("Choose any Photometry file")
-photometry_file = ui_find_file(title="Choose any Photometry file", initialdir=ephys_folder)
+# Finding the photometry file
+console.log(f"Choose any Matching Photometry file for session {session_id}")
+photometry_file = ui_find_file(title=f"Choose any Matching Photometry file for session {session_id}", initialdir=ephys_folder)
 tdt_folder = os.path.dirname(photometry_file)
 console.info(f"Selected TDT folder is {tdt_folder}")
 
@@ -64,8 +142,6 @@ tdt_pulse_onset = tdt.read_block(tdt_folder, store = fix_tdt_names(pulse_sync_na
 # We cannot use the last offset here because it's inf, but the difference is < pulse's width here
 tdt_epoc_duration = tdt_pulse_onset[-1] - tdt_pulse_onset[0]
 
-console.info(f"loading {ttl_file}")
-ttl_array = np.load(ttl_file)
 photo_ttl_idx = np.where("photometry" in config["ttl_names"])[0]
 photo_events = ttl_array[photo_ttl_idx, :].flatten()
 pulse_onset = np.where(np.diff(photo_events, prepend=0) > 0)[0]
@@ -125,7 +201,8 @@ params_dict = {
                                 "value": len(pulse_onset)}
 }
 
-params_file = os.path.join(ephys_folder, f"{Path(ttl_file).stem}_alignment_params.yaml")
+# It will have the filename of the first ttl file
+params_file = os.path.join(ephys_folder, 'ttl', f"{Path(ttl_files[0]).stem}_alignment_params.yaml")
 
 with open(params_file, 'w') as outfile:
     yaml.safe_dump(params_dict, outfile, default_flow_style=False, sort_keys=False)
