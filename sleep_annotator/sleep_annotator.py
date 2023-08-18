@@ -14,6 +14,32 @@ from sklearn.preprocessing import minmax_scale
 from scipy.signal import hilbert, butter, filtfilt, sosfiltfilt
 from lspopt import spectrogram_lspopt
 
+class FileSelectionDialog(QDialog):
+    def __init__(self, filenames):
+        super().__init__()
+
+        layout = QVBoxLayout(self)
+        self.listWidget = QListWidget(self)
+        layout.addWidget(self.listWidget)
+
+        # Add the filenames to the list widget
+        for filename in filenames:
+            self.listWidget.addItem(filename)
+
+        self.selected_file = None
+
+        self.button = QPushButton('OK', self)
+        layout.addWidget(self.button)
+        self.button.clicked.connect(self.on_button_clicked)
+
+    def on_button_clicked(self):
+        self.selected_file = self.listWidget.currentItem().text()
+        self.close()
+
+    def getOpenFileName(self):
+        self.exec_()
+        return self.selected_file
+
 
 class FileDialog(QDialog):
     def __init__(self):
@@ -204,6 +230,21 @@ class SignalVisualizer(QMainWindow):
         self.spectrogram_plot.plotItem.vb.sigRangeChanged.connect(self.spectrogram_range_changed)
 
 
+        # EMG Tab
+        self.emg_tab_widget = QTabWidget()
+
+        # selected EMG
+        self.selected_emg = QDockWidget("EMG", self)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.selected_emg)
+        self.selected_emg_plot = pg.PlotWidget()  # Create a PlotWidget for the Selected EMG
+        # RMS EMG
+        self.emg_rms_plot = pg.PlotWidget()  # Create a PlotWidget for the Selected EMG
+
+        self.selected_emg.setWidget(self.emg_tab_widget) 
+        # The RMS first
+        self.emg_tab_widget.addTab(self.emg_rms_plot, "RMS EMG")
+        self.emg_tab_widget.addTab(self.selected_emg_plot, "Selected EMG")
+
         # Selected eeg channel
         # Create a tab widget
         self.tab_widget = QTabWidget()
@@ -223,11 +264,6 @@ class SignalVisualizer(QMainWindow):
         # Add the EEG plot and the selected electrode plot to the tab widget
         self.tab_widget.addTab(self.eeg_plot, "All Electrodes")
         self.tab_widget.addTab(self.selected_electrode_plot, "Selected Electrode")
-
-        self.selected_emg = QDockWidget("Selected EMG", self)
-        self.addDockWidget(Qt.RightDockWidgetArea, self.selected_emg)
-        self.selected_emg_plot = pg.PlotWidget()  # Create a PlotWidget for the Selected EMG
-        self.selected_emg.setWidget(self.selected_emg_plot)  # Set the PlotWidget as the dock widget's widget
 
         # Ethogram
         self.state_dict = {'1': "NREM", '2':"REM", '3':"Wake"}
@@ -258,9 +294,9 @@ class SignalVisualizer(QMainWindow):
 
 
         # Link the x-axes of all the plots
-        #self.spectrogram_plot.setXLink(self.eeg_plot)
         self.ethogram_plot.setXLink(self.eeg_plot)
         self.power_plots_plot.setXLink(self.eeg_plot)
+        self.emg_rms_plot.setXLink(self.spectrogram_plot)
 
         # Key bindings
         # move data to the right
@@ -284,19 +320,45 @@ class SignalVisualizer(QMainWindow):
         self.central_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self.eeg.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
+        # Modals
+        self.munge_dialog = QDialog(self)
+        self.munge_dialog.setWindowTitle("Processing Data")
+        munge_layout = QVBoxLayout(self.munge_dialog)
+        munge_layout.addWidget(QLabel("Processing data, please wait..."))
+        self.munge_dialog.setLayout(munge_layout)
+        self.munge_dialog.setModal(True)
+
 
     def load_eeg_data(self):
         self.electrode_selected = False
         self.emg_selected = False
 
-        filename, _ = QFileDialog.getOpenFileName(self, 'Open file', '', 'CSV Files (*.csv *.gz)')
+        #filename, _ = QFileDialog.getOpenFileName(self, 'Open file', '', 'CSV Files (*.csv *.gz)')
+
+        directory = QFileDialog.getExistingDirectory(self, 'Open folder', '', options = QFileDialog.ShowDirsOnly)
+
+        if directory:
+            # List the CSV and GZ files in the directory without loading them
+            filenames = [os.path.join(directory, file) for file in os.listdir(directory) if file.endswith(('.csv', '.gz'))]
+
+            # Pass the filenames to a custom dialog for file selection
+            dialog = FileSelectionDialog(filenames)
+            filename = dialog.getOpenFileName()
 
         if filename:
+            self.download_dialog = QDialog(self)
+            self.download_dialog.setWindowTitle("Loading Data")
+            layout = QVBoxLayout(self.download_dialog)
+            layout.addWidget(QLabel("Accessing data, please wait..."))
+            self.download_dialog.setLayout(layout)
+            self.download_dialog.setModal(True)
+            self.download_dialog.show()
+
             self.load_thread = LoadThread(filename)
             self.load_thread.notifyProgress.connect(self.update_status)
-            self.load_thread.dataLoaded.connect(self.set_data)  # Connect the new signal to a slot
+            self.load_thread.dataLoaded.connect(self.set_data)
+            self.load_thread.finished.connect(self.download_dialog.accept)  # Close the dialog when the thread finishes
             self.load_thread.start()
-
     
     def load_ann_data(self):
         try:
@@ -501,8 +563,27 @@ class SignalVisualizer(QMainWindow):
 
     def add_emg_diff(self):
         self.data = self.data.with_columns((pl.col("EMG1") - pl.col('EMG2')).alias('emg_diff'))
-        
+    
+    def process_emg(self, emg):
+        rms = np.log(np.sqrt(np.sum(emg * emg) / len(emg)))
+        return rms
+
+    #convolve is not what we want here, we want to have RMS match the spectrogram
+    #def window_rms(self, signal, window_size):
+    #    signal2 = np.power(signal, 2)
+    #    window = np.ones(window_size)/float(window_size)
+    #    return np.sqrt(np.convolve(signal2, window, 'valid'))
+
+    def window_rms(self, signal, window_size):
+        num_segments = len(signal) // window_size
+        rms_values = np.zeros(num_segments)
+        for i in range(num_segments):
+            segment = signal[i * window_size: (i + 1) * window_size]
+            rms_values[i] = np.sqrt(np.mean(segment ** 2))
+        return rms_values
+
     def munge_data(self):
+        #self.munge_dialog.show()
         # normalize to plot 
         self.eeg_plot_data = self.normalize_data()
         # Determine data properties
@@ -513,11 +594,13 @@ class SignalVisualizer(QMainWindow):
         self.sample_axis = np.arange(0, self.data.shape[0], 1)
         self.selected_electrode = self.data.select(pl.col(self.electrode_input.currentText())).to_numpy().squeeze()
         # demean
-        self.selectede_electrode = self.selected_electrode - np.mean(self.selected_electrode)
+        self.selected_electrode = self.selected_electrode - np.mean(self.selected_electrode)
         #self.selected_electrode_y_range = self.return_clipped_range(self.selected_electrode)
         self.selected_emg_channel = self.data.select(pl.col(self.emg_input.currentText())).to_numpy().squeeze()
         # demean
         self.selected_emg_cannel = self.selected_emg_channel - np.mean(self.selected_emg_channel)
+        self.log_rms_emg = self.window_rms(signal = self.selected_emg_channel, window_size = self.win_sec * self.sampling_frequency)
+        self.log_rms_emg = np.log10(self.log_rms_emg)
         # Compute spectrogram
         self.spectrogram = self.compute_spectrogram()
         # Mark spec_img as none, so that update_spec re-plots
@@ -525,6 +608,11 @@ class SignalVisualizer(QMainWindow):
         # Compute power plots
         self.compute_hilbert()
         self.update_plots()
+        # get to the current point
+        self.jump_to_time()
+        # dialog is having issues
+        #self.munge_dialog.close()
+        #self.spectrogram_plot.setFocus()
 
     def load_files_from_directory(self, folder_path):
         # Get list of .csv.gz files in the folder
@@ -807,6 +895,7 @@ class SignalVisualizer(QMainWindow):
         x_ticks_labels = self.downsample(x_ticks_labels, downsample_factor)
         # Set x-axis ticks
         self.spectrogram_plot.getAxis("bottom").setTicks([list(zip(x_ticks_seconds, x_ticks_labels))])
+        self.emg_rms_plot.getAxis("bottom").setTicks([list(zip(x_ticks_seconds, x_ticks_labels))])
 
 
     def update_spec_plot(self):
@@ -815,6 +904,8 @@ class SignalVisualizer(QMainWindow):
             return
 
         f, t, Sxx = self.spectrogram
+        # Assuming the RMS values are computed with the same window size as the spectrogram
+        t_rms = np.linspace(0, (len(self.log_rms_emg) - 1) * self.win_sec, len(self.log_rms_emg))
 
         # Check if the ImageItem for the spectrogram has been added to the spec_plot
         if self.spec_img is None:
@@ -847,16 +938,27 @@ class SignalVisualizer(QMainWindow):
             if not self.spectrogram_zoomed:
                 self.spectrogram_plot.plotItem.autoRange()
 
+            # plot the rms
+            self.emg_rms_plot.clear() # clear previous
+            self.emg_rms_plot.plotItem.plot(t_rms, self.log_rms_emg, pen=pg.mkPen(color=(171, 235, 221), width=1))
+
+
         # Draw a vertical line indicating the current range
         # First, remove the previous line if it exists
         if hasattr(self, 'vLine'):
             self.spectrogram_plot.removeItem(self.vLine)
+        if hasattr(self, 'vLine_rms'):
+            self.emg_rms_plot.removeItem(self.vLine_rms)
         # Now add a new line
         start_time = self.current_position * self.win_sec  # Use current_position and window length to calculate start time
         self.vLine = pg.InfiniteLine(angle=90, movable=False, pen='y')
         self.vLine.setPos(start_time)
         self.vLine.setBounds([t[0], t[-1]])
         self.spectrogram_plot.addItem(self.vLine)
+        self.vLine_rms = pg.InfiniteLine(angle=90, movable=False, pen='y')
+        self.vLine_rms.setPos(start_time)
+        self.vLine_rms.setBounds([t_rms[0], t_rms[-1]]) # Assuming t_rms is the time array for the RMS plot
+        self.emg_rms_plot.addItem(self.vLine_rms)
 
         # Set spectrogram x-axis ticks to HH:MM:SS format
         #x_ticks_seconds = t
