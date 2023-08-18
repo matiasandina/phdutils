@@ -63,9 +63,11 @@ def chunk_file_list(file_list, expected_delta_min, discontinuity_tolerance):
     chunks = np.split(file_list, discontinuous_indices + 1)
     return chunks
 
-def read_stack_chunks(file_chunk, num_channels, dtype=np.float32):
+def read_stack_chunks(file_chunk, num_channels, dtype=np.float32, return_nsamples = False):
   num_files = len(file_chunk)
   combined_data = [None] * num_files
+  # we need to store the number of nsamples for alignment purposes
+  nsamples = []
   for file_idx, file in enumerate(file_chunk):
     
     console.log(f"Read data from file {file} ({file_idx+1}/{num_files})")
@@ -73,6 +75,7 @@ def read_stack_chunks(file_chunk, num_channels, dtype=np.float32):
     eeg_array = np.fromfile(file, dtype=dtype)
     # first integer division, then blowup.
     n_samples_all_channels = eeg_array.shape[0] // num_channels
+    nsamples.append(n_samples_all_channels)
     console.info(f"Reading all dataset. Reshaping and transposing into {num_channels, n_samples_all_channels}")
     # subset and reshape
     eeg_array = eeg_array.reshape(n_samples_all_channels, num_channels).T
@@ -102,7 +105,10 @@ def read_stack_chunks(file_chunk, num_channels, dtype=np.float32):
   # Stack files belonging to a chunk horizontally
   combined_data = np.hstack(combined_data)
   console.info(f"Stacked data horizontally into {combined_data.shape}")
-  return combined_data
+  if return_nsamples:
+    return combined_data, nsamples
+  else:
+    return combined_data
 
 def filter_data(data, config, save=False, outpath = None):
   f_aq = config["aq_freq_hz"]

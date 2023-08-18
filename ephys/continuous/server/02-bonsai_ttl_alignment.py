@@ -53,7 +53,7 @@ ttl_files = list_files(os.path.join(ephys_folder, "ttl"), pattern = ".bin", full
 num_channels = len(config['ttl_names'])
 # ttl data comes demultiplexed in ColumMajor
 # dtype for ttl it's np.int8
-ttl_array = read_stack_chunks(ttl_files, num_channels, dtype=np.int8)
+ttl_array, ttl_samples = read_stack_chunks(ttl_files, num_channels, dtype=np.int8, return_nsamples = True)
 # normalize so max values go from 1, 2, 3, 4, 5, 6, 7, 8 to all being 1 
 ttl_array = normalize_ttl(ttl_array, method="max")
 console.success("TTL data read and normalized")
@@ -67,7 +67,7 @@ matching_eeg_files = [val.replace("ttl_in", "eeg") for val in ttl_files]
 matching_eeg_files = [val.replace('/ttl/', '/eeg/') for val in matching_eeg_files]
 
 # Iterate over the files and combine data
-combined_data = read_stack_chunks(matching_eeg_files, len(config['selected_channels']), dtype = np.float32)
+combined_data, eeg_samples = read_stack_chunks(matching_eeg_files, len(config['selected_channels']), dtype = np.float32, return_nsamples = True)
 # bandpass filter data
 filtered_data = filter_data(combined_data, config, save = False)
 # Downsample
@@ -176,6 +176,14 @@ console.info(f"Bonsai received: {len(pulse_onset)} pulses")
 #  console.success(f"Lengths match on both recordings, aligning to first event")
 #  # If everything checks out 
 alignment_idx = 0
+# in continuous mode, the first TTL file will always have less elements than the first eeg file
+# the last TTL file will also have less elements than the last eeg file
+# we have to account for that by adding the difference in samples to the pulse_onset
+samples_to_add = (np.array(eeg_samples) - np.array(ttl_samples))[0] 
+console.info(f"The difference between the first eeg_samples and ttl_samples is {samples_to_add} samples.")
+console.info(f"This difference should match the previous shape information. Adding {samples_to_add} to pulse_onset to match eeg_t0_sec")
+pulse_onset = pulse_onset + samples_to_add
+# now that we accounted for the difference, we can convert to seconds
 eeg_t0_sec = pulse_onset[alignment_idx] / config['aq_freq_hz']
 
 
@@ -190,7 +198,7 @@ params_dict = {
                       "value" : max_t
 
   },
-  "alignment_idx" :{"description": "The index on bonsai_pulse_onset used for alignment. pulse_onset[alignment_idx] shoud be eeg_t0_sec. This will be zero, unless bonsai received more pulses than TDT sent (e.g., TDT recording started and stopped while bonsai kept recording)",
+  "alignment_idx" :{"description": "The index on bonsai_pulse_onset used for alignment. pulse_onset[alignment_idx] shoud be eeg_t0_sec. This index will be zero (the first pulse), unless bonsai received more pulses than TDT sent (e.g., TDT recording started and stopped while bonsai kept recording)",
                       "vaue" : int(alignment_idx)
 
   },
