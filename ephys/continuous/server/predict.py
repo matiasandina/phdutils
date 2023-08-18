@@ -10,7 +10,7 @@ import polars as pl
 from rlist_files import list_files
 from py_console import console
 from utils import *
-
+import argparse
 
 def predict_electrode(eeg, emg, epoch_sec = 2):
   info =  mne.create_info(["eeg","emg"], 
@@ -89,20 +89,34 @@ def consensus_prediction(predictions_df, max_probabilities_df):
 
 # This is what has to run
 # TODO: fix the path
-def run_and_save_predictions(animal_id):
-  base_folder = f"/synology-nas/MLA/beelink1/{animal_id}"
+def run_and_save_predictions(animal_id, date, display=False ):
+  base_folder = os.path.join("/synology-nas/MLA/beelink1", animal_id)
+  # coerce date back to yyyy-mm-dd as character
+  date = str(date)
   # Check if base folder exists
   if not os.path.exists(base_folder) or not os.path.isdir(base_folder):
       console.error(f"Error: The base folder '{base_folder}' does not exist or is not a directory.")
       console.error("Make sure the path is correct and/or the NAS is mounted properly to the '/synology-nas' directory.")
       return
+  session_folder = os.path.join(base_folder, date)
+  eeg_folder = os.path.join(session_folder, "eeg")
+  # Check if eeg folder exists
+  if not os.path.exists(eeg_folder) or not os.path.isdir(eeg_folder):
+      console.error(f"Error: The base folder '{eeg_folder}' does not exist or is not a directory.")
+      console.error(f"Date was {date}, is this correct?, check `ls {eeg_folder}`")
+      return
 
   console.log("Finding downsampled EEG file")
-  eeg_file = list_files('/synology-nas/MLA/beelink1/MLA121/2023-06-12/eeg/', pattern = "*desc-down*csv.gz", full_names = True)
-  eeg_df = pl.read_csv(eeg_file)
-sf = 100
-results = {}
-for column in eeg_df.columns:
+  eeg_file = list_files(eeg_folder, pattern = "*desc-down*csv.gz", full_names = True)
+  # This might happen if data is chunked I believe
+  if len(eeg_file) > 1:
+    console.error("More than one match. Check eeg_file pattern")
+    print(eeg_file)
+    return
+  console.log(f"Working with {eeg_file[0]}")
+  eeg_df = pl.read_csv(eeg_file[0])
+  results = {}
+  for column in eeg_df.columns:
     if column.startswith('EEG'):
         eeg = eeg_df[column].to_numpy()
         # Calculate EMG difference for each EEG channel
@@ -164,13 +178,23 @@ for column in eeg_df.columns:
   output_df = pd.DataFrame({'consensus': consensus, 'mfv' : mfv}).apply(yasa.hypno_int_to_str)
 
   # Saving data 
-  output_df.to_csv('consensus_mfv_predictions.csv.gz', index=False)
-  hypno_predictions_df.to_csv('hypno_predictions.csv.gz', index=False)
-  max_probabilities_df.to_csv('max_probabilities.csv.gz', index=False)
+  output_df.to_csv(bids_naming(session_folder, animal_id, date, 'consensus_mfv_predictions.csv.gz'), index=False)
+  hypno_predictions_df.to_csv(bids_naming(session_folder, animal_id, date, 'hypno_predictions.csv.gz'), index=False)
+  max_probabilities_df.to_csv(bids_naming(session_folder, animal_id, date, 'max_probabilities.csv.gz'), index=False)
+
+def bids_naming(session_folder, subject_id, session_date, filename):
+    session_date = session_date.replace("-", "")
+    return(os.path.join(session_folder, f"sub-{subject_id}_ses-{session_date}_{filename}"))
 
 if __name__ == '__main__':
-  # parse the folder path so that we search and save the csv in the proper directory
   parser = argparse.ArgumentParser()
-  parser.add_argument("--animal_id", required=True, help="Animal ID for constructing the base path")
+  parser.add_argument("--animal_id", required=True, help="Animal ID for constructing the base path. /path_to_storage/animal_id")
+  parser.add_argument("--date", required=True, 
+    type=datetime.date.fromisoformat,
+    help="Date that wants to be analized yyyy-mm-dd, used to construct folder path (/path_to_storage/animal_id/date/eeg/)")
+  parser.add_argument('--config_folder', help='Path to the config folder')
   args = parser.parse_args()
-  run_and_save_predictions(args.animal_id)  
+  config = read_config(args.config_folder)
+  sf = config['down_freq_hz']
+  console.log(f'Running with sf={sf}')
+  run_and_save_predictions(args.animal_id, args.date)  
