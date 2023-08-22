@@ -11,6 +11,56 @@ from rlist_files import list_files
 from py_console import console
 from utils import *
 
+def parse_bids_subject(string: str):
+  return string.split("_")[0].replace("sub-", "")
+
+def parse_bids_session(string: str):
+  return string.split("_")[1].replace("ses-", "")
+
+def bids_naming(session_folder, subject_id, session_date, filename):
+  session_date = session_date.replace("-", "")
+  return(os.path.join(session_folder, f"sub-{subject_id}_ses-{session_date}_{filename}"))
+
+
+def get_max_probabilities(results):
+    electrode_probabilities = {}
+    for electrode, data in results.items():
+        proba = data['proba'].max(axis=1)
+        electrode_probabilities[electrode] = proba
+    return pd.DataFrame(electrode_probabilities)
+
+
+def aggregate_hypno_predictions(results):
+    electrode_hypno = {}
+    for electrode, data in results.items():
+        hypno = data['hypno']
+        electrode_hypno[electrode] = hypno
+    return pd.DataFrame(electrode_hypno)
+
+
+def get_most_frequent_value(predictions_df):
+    from scipy.stats import mode
+    # Calculate the most frequent value (mode) across all electrodes for each epoch
+    most_frequent, _ = mode(predictions_df.values, axis=1, keepdims = False)
+    return most_frequent
+
+def consensus_prediction(predictions_df, max_probabilities_df):
+    # Ensure both DataFrames have the same indexes
+    assert np.all(predictions_df.index == max_probabilities_df.index), "Indexes must match."
+    # Get unique categories from the predictions DataFrame
+    categories = np.unique(predictions_df.values.ravel())
+    # Initialize DataFrame to store weighted votes for each category
+    weighted_votes_df = pd.DataFrame(index=predictions_df.index)
+    # Calculate weighted votes for each category
+    for category in categories:
+        # Create DataFrame with binary values indicating whether each element matches the current category
+        binary_df = (predictions_df == category).astype(int)
+        # Calculate weighted votes by multiplying binary DataFrame element-wise with max_probabilities_df
+        weighted_votes_df[category] = (binary_df * max_probabilities_df).sum(axis=1)
+    # Consensus predictions are the categories with maximum weighted vote
+    consensus_predictions = weighted_votes_df.idxmax(axis=1)
+    return consensus_predictions
+
 
 def predict_electrode(eeg, emg, epoch_sec = 2):
   info =  mne.create_info(["eeg","emg"], 
@@ -49,6 +99,9 @@ def plot_spectrogram(eeg, hypno, epoch_sec = 2):
 
 console.log("Choose downsampled EEG file")
 eeg_file = ui_find_file(title="Choose downsampled EEG file", initialdir=os.path.expanduser("~"))
+session_folder = os.path.dirname(eeg_file)
+animal_id = parse_bids_subject(os.path.basename(eeg_file))
+session = parse_bids_session(os.path.basename(eeg_file))
 # eeg_file = list_files(pattern  ="eegdata_desc-down-*_eeg.csv.gz")
 eeg_df = pl.read_csv(eeg_file)
 sf = 100
@@ -67,3 +120,16 @@ for column in eeg_df.columns:
         
         # Store hypno and proba in the results dictionary under the column key
         results[column] = {"hypno": hypno, "proba": proba}
+
+hypno_predictions_df = aggregate_hypno_predictions(results)
+max_probabilities_df = get_max_probabilities(results)
+
+mfv = get_most_frequent_value(hypno_predictions_df)
+consensus = consensus_prediction(hypno_predictions_df, max_probabilities_df)
+
+output_df = pd.DataFrame({'consensus': consensus, 'mfv' : mfv}).apply(yasa.hypno_int_to_str)
+
+# Saving data 
+output_df.to_csv(bids_naming(session_folder, animal_id, session, 'consensus_mfv_predictions.csv.gz'), index=False)
+hypno_predictions_df.to_csv(bids_naming(session_folder, animal_id, session, 'hypno_predictions.csv.gz'), index=False)
+max_probabilities_df.to_csv(bids_naming(session_folder, animal_id, session, 'max_probabilities.csv.gz'), index=False)
