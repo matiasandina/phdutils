@@ -74,8 +74,10 @@ ui <- navbarPage(
           ),
           textInput("notes", label = "Notes:", ""),
           actionButton("submitButton", "Submit Entry", width = "50%", 
-                       icon = icon("glyphicon glyphicon-ok", class="success")),
-          actionButton("saveButton", "Save Data", width = "50%")
+                       icon = icon("ok", lib = "glyphicon", class="success")),
+          actionButton("saveButton", "Save Data", width = "50%"),
+          actionButton("clearData", "Clear Data", width = "50%", 
+                       icon = icon('trash', lib = "glyphicon", class = 'error'))
         )
       ),
       grid_card_plot(area = "linePlots", width = "500px") # Reduced plot width
@@ -95,14 +97,18 @@ server <- function(input, output, session) {
   file_path <- reactiveVal(NULL)
   animal_id <- reactiveVal(NULL)
   
-  mouse_data <- reactiveVal(tibble(
-    id = character(),
-    datetime = as.POSIXct(character()),
-    weight = numeric(),
-    note = character()
-  ))
+  initial_tibble <- function() {
+    tibble(
+      id = character(),
+      datetime = as.POSIXct(character()),
+      weight = numeric(),
+      note = character()
+    )
+  }
   
-  
+  # define the first time empty anyways for other initialization issues
+  mouse_data <- reactiveVal(initial_tibble())
+
   observe({
     shinyDirChoose(input, 'folder', roots = c(home = normalizePath("~")))
     # If a folder is selected, update the reactive value
@@ -111,7 +117,13 @@ server <- function(input, output, session) {
       selected_folder(folder_path)
       animal_id_value <- basename(folder_path)
       animal_id(animal_id_value)
-      folderSelected(TRUE)
+      if (isFALSE(folderSelected())){
+        folderSelected(TRUE)
+        # define the data upon creation
+        mouse_data(initial_tibble())
+        print("Reseting Mouse Data")
+        print(mouse_data())
+      }
     }
   })
   
@@ -172,12 +184,20 @@ server <- function(input, output, session) {
       animal_id(animal_id_value)
       
       loaded_data <- readr::read_csv(full_path)
+      # Initialize it 
+      mouse_data <- reactiveVal(initial_tibble())
       mouse_data(loaded_data) # Update reactive value
       # Enable the submit button once the file is loaded
       shinyjs::enable("submitButton")
     }
   })
-  
+
+  # Clear data
+  observeEvent(input$clearData, {
+    mouse_data(initial_tibble())
+    shinyalert::shinyalert("Success", "Weight Data was Cleared!", type = "success")
+  }
+  )
   # Save data
   observeEvent(input$saveButton, {
     folder_path <- selected_folder() 
@@ -217,6 +237,8 @@ server <- function(input, output, session) {
     )
     # Append new entry to mouse_data
     updated_data <- dplyr::bind_rows(mouse_data(), new_entry)
+    # arrange by datetime
+    updated_data <- dplyr::arrange(updated_data, datetime)
     mouse_data(updated_data) # Update reactive value
     
     output$dataTable <- DT::renderDT({

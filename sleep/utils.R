@@ -18,6 +18,35 @@ convert_accusleep_labels <- function(col){
     )
   }
 
+'[‘W’, ‘N1’, ‘N2’, ‘N3’, ‘R’] ==> [0, 1, 2, 3, 4]
+
+'
+
+convert_yasa_int <- function(col){
+  assertthat::assert_that(is.integer(col),
+                          msg = glue::glue("`col` must be integer, received `{class(col)}`"))
+  return(
+    dplyr::case_when(col == 0L ~ "Wake",
+                     # All 'N' go to NREM
+                     col == 1L ~ "NREM",
+                     col == 2L ~ "NREM",
+                     col == 3L ~ "NREM",
+                     col == 4L ~ "REM")
+  )
+}
+
+
+convert_yasa_strings <- function(col){
+  assertthat::assert_that(is.character(col),
+                          msg = glue::glue("`col` must be character, received `{class(col)}`"))
+  return(
+    dplyr::case_when(col == 'R' ~ "REM",
+                     col == 'W' ~ "Wake",
+                     str_detect(col, "N") ~ "NREM")
+  )
+}
+
+
 make_time_column <- function(sf, ...){
   return(seq(from = 0, by = 1/sf, ... ))
 }
@@ -30,6 +59,7 @@ paste_behavior <- function(pre, post){
 }
 
 
+# reading sleep functions -------------------------------------------------
 read_sleep_from_mat <- function(filepath, params, scoring_period = 2, convert_accusleep=TRUE){
   eeg_t0_sec <- pluck(params, 'eeg_t0_sec', 'value')
   max_t <- pluck(params, 'photo_max_t', 'value')
@@ -50,6 +80,28 @@ read_sleep_from_mat <- function(filepath, params, scoring_period = 2, convert_ac
   return(sleep_behavior)
 }
 
+
+read_sleep_consensus <- function(filepath, params, scoring_period = 2){
+  eeg_t0_sec <- pluck(params, 'eeg_t0_sec', 'value')
+  max_t <- pluck(params, 'photo_max_t', 'value')
+  sleep_behavior <- readr::read_csv(filepath, show_col_types = FALSE) %>% 
+    mutate_all(.funs = convert_yasa_strings) %>% 
+    mutate(time_sec = make_time_column(sf = 1/scoring_period,
+                                       length.out=n()), 
+           aligned_time_sec = time_sec - eeg_t0_sec)  %>% 
+    filter(data.table::between(aligned_time_sec, 0, max_t)) %>% 
+    # rename to get an extra column
+    # we can repurpose if we wanted to switch to mfv1
+    mutate(sleep = consensus)
+  
+  # Microarousals
+  sleep_behavior <- sleep_behavior %>% 
+    mutate(run_id = vctrs::vec_identify_runs(sleep)) %>% 
+    mutate(.by="run_id", 
+           duration = last(aligned_time_sec) - first(aligned_time_sec) + scoring_period, 
+           sleep2 = if_else(sleep == "Wake" & duration < 16, "MA", sleep)) 
+  return(sleep_behavior)
+}
 
 plot_eeg_array <- function(ap, ml){
   df <- dplyr::arrange(tidyr::expand_grid(ap, ml), desc(ap))
