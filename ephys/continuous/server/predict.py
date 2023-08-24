@@ -106,7 +106,7 @@ def run_and_save_predictions(animal_id, date, display=False ):
       console.error(f"Date was {date}, is this correct?, check `ls {eeg_folder}`")
       return
 
-  console.log("Finding downsampled EEG file")
+  console.log("Finding downsampled EEG file for prediction")
   eeg_file = list_files(eeg_folder, pattern = "*desc-down*csv.gz", full_names = True)
   # This might happen if data is chunked I believe
   if len(eeg_file) > 1:
@@ -178,9 +178,15 @@ def run_and_save_predictions(animal_id, date, display=False ):
   output_df = pd.DataFrame({'consensus': consensus, 'mfv' : mfv}).apply(yasa.hypno_int_to_str)
 
   # Saving data 
-  output_df.to_csv(bids_naming(session_folder, animal_id, date, 'consensus_mfv_predictions.csv.gz'), index=False)
-  hypno_predictions_df.to_csv(bids_naming(session_folder, animal_id, date, 'hypno_predictions.csv.gz'), index=False)
-  max_probabilities_df.to_csv(bids_naming(session_folder, animal_id, date, 'max_probabilities.csv.gz'), index=False)
+  output_fn = bids_naming(session_folder, animal_id, date, 'consensus_mfv_predictions.csv.gz')
+  output_df.to_csv(output_fn, index=False)
+  console.success(f"Wrote consensus predictions to {output_fn}")
+  hypno_fn = bids_naming(session_folder, animal_id, date, 'hypno_predictions.csv.gz')
+  hypno_predictions_df.to_csv(hypno_fn, index=False)
+  console.success(f"Wrote predictions to {hypno_fn}")
+  proba_fn = bids_naming(session_folder, animal_id, date, 'max_probabilities.csv.gz')
+  max_probabilities_df.to_csv(proba_fn, index=False)
+  console.success(f"Wrote probas to {proba_fn}")
 
 def bids_naming(session_folder, subject_id, session_date, filename):
     session_date = session_date.replace("-", "")
@@ -196,5 +202,5 @@ if __name__ == '__main__':
   args = parser.parse_args()
   config = read_config(args.config_folder)
   sf = config['down_freq_hz']
-  console.log(f'Running with sf={sf}')
+  console.log(f'Running `predict.py` with sf={sf}')
   run_and_save_predictions(args.animal_id, args.date)  

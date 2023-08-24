@@ -31,12 +31,14 @@ def run_pipeline(start_date=None, animal_id=None):
         os.system(command)
 
         # Optionally, you can add any post-processing steps here
-        # ...
-        # if ttl folder exists:
-        # do the alignment, this is interactive to select the specific TDT data though
-
+        if os.path.isdir(ttl_folder_path):
+            console.info("Found ttl folder, there's an interactive folder selection in this step!")
+            # do the alignment, this is interactive to select the specific TDT data though
+            command = f"python3 02-bonsai_ttl_alignment.py --session_folder {os.path.dirname(ttl_folder_path)} --config_folder {base_folder}"
+            os.system(command)
         # do the prediction
-
+        command = f"python3 predict.py --animal_id {animal_id} --date {folder} --config_folder {base_folder}"
+        os.system(command)
         # Print a newline for separation between iterations
         console.log(f"Finished folder {folder}")
 
