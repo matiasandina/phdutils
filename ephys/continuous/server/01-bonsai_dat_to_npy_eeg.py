@@ -80,6 +80,9 @@ for chunk_idx, chunk in enumerate(chunks):
   console.log(f"Working on chunk {chunk_idx + 1}/{len(chunks)}")
   # Iterate over the files and combine data
   combined_data = read_stack_chunks(chunk, num_channels)
+  # Center data
+  console.info("Centering data")
+  combined_data = combined_data - np.mean(combined_data, axis = 1, keepdims = True)
   # bandpass filter data
   filtered_data = filter_data(combined_data, config, save = False)
   # Downsample
@@ -91,7 +94,7 @@ for chunk_idx, chunk in enumerate(chunks):
     assert config["aq_freq_hz"] > config["down_freq_hz"], f"{config['aq_freq_hz']} must be greater than {config['down_freq_hz']}"
     downsample_factor = int(config["aq_freq_hz"]/config["down_freq_hz"])
     console.info(f"Downsampling with factor {downsample_factor} from {config['aq_freq_hz']} into {config['down_freq_hz']} Hz")
-    data_down = decimate(combined_data, downsample_factor, ftype='fir')
+    data_down = decimate(filtered_data, downsample_factor, ftype='fir')
     channel_map = create_channel_map(data_down, config)
     console.info(f"Provided channel map is {channel_map}")
     eeg_df = pl.DataFrame(data_down.T, schema = channel_map)
