@@ -79,7 +79,7 @@ else:
     assert config["aq_freq_hz"] > config["down_freq_hz"], f"{config['aq_freq_hz']} must be greater than {config['down_freq_hz']}"
     downsample_factor = int(config["aq_freq_hz"]/config["down_freq_hz"])
     console.info(f"Downsampling with factor {downsample_factor} from {config['aq_freq_hz']} into {config['down_freq_hz']} Hz")
-    data_down = decimate(combined_data, downsample_factor, ftype='fir')
+    data_down = decimate(filtered_data, downsample_factor, ftype='fir')
     channel_map = create_channel_map(data_down, config)
     console.info(f"Provided channel map is {channel_map}")
     eeg_df = pl.DataFrame(data_down.T, schema = channel_map)
