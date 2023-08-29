@@ -18,11 +18,10 @@ convert_accusleep_labels <- function(col){
     )
   }
 
-'[‘W’, ‘N1’, ‘N2’, ‘N3’, ‘R’] ==> [0, 1, 2, 3, 4]
 
-'
 
 convert_yasa_int <- function(col){
+  '[‘W’, ‘N1’, ‘N2’, ‘N3’, ‘R’] ==> [0, 1, 2, 3, 4]'
   assertthat::assert_that(is.integer(col),
                           msg = glue::glue("`col` must be integer, received `{class(col)}`"))
   return(
@@ -250,3 +249,41 @@ check_run_time <- function(data, id){
     mutate(x = hms::as_hms(x + eeg_t0_sec)) %>% 
     pull(x)
 }
+
+
+# 
+library(pracma)
+library(dplyr)
+
+compute_hilbert <- function(electrode, sampling_frequency) {
+  bands <- list(
+    "delta" = c(0.5, 4),
+    "theta" = c(4, 8),
+    "sigma" = c(8, 15)
+  )
+  
+  envelopes <- list()
+  for (band in names(bands)) {
+    low <- bands[[band]][1]
+    high <- bands[[band]][2]
+    
+    # Apply bandpass filter
+    wpass <- c(low, high) / (sampling_frequency / 2)
+    sos <- gsignal::butter(10, wpass, type='pass', output='Sos')
+    filtered <- gsignal::sosfilt(sos$sos, electrode)
+    print(filtered[1:5])
+    
+    # Apply Hilbert transform to get the envelope (i.e., the amplitude) of the signal
+    analytic_signal <- gsignal::hilbert(filtered)
+    amplitude_envelope <- Mod(analytic_signal)
+    
+    # Store the envelope in the DataFrame
+    envelopes[[band]] <- amplitude_envelope
+  }
+  
+  envelopes <- dplyr::bind_cols(envelopes)
+  return(envelopes)
+}
+
+compute_hilbert(eeg$EEG1[1:1000], 100)
+
