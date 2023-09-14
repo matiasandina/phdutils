@@ -883,6 +883,8 @@ class SignalVisualizer(QMainWindow):
             print("Can't move from start to finish backwards")
 
     def update_win_sec(self):
+        if self.ethogram_labels is not None:
+            QMessageBox.warning(self, "CAUTION!", "Labels will not be interpolated to the new annotation window.\nChanging the annotation window can corrupt the data!")
         try:
             win_sec_value = float(self.win_sec_input.text())#int(self.win_sec_input.text())
             self.win_sec = win_sec_value
