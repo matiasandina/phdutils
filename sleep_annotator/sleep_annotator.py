@@ -13,6 +13,7 @@ from datetime import timedelta
 from sklearn.preprocessing import minmax_scale
 from scipy.signal import hilbert, butter, filtfilt, sosfiltfilt
 from lspopt import spectrogram_lspopt
+import datetime
 
 class FileSelectionDialog(QDialog):
     def __init__(self, filenames):
@@ -184,6 +185,24 @@ class SignalVisualizer(QMainWindow):
         self.emg_selected = False
         self.emg_input.currentTextChanged.connect(self.select_emg)
 
+        # Explanation and controls for setting EMG Y range
+        self.emg_y_range_controls = QWidget()
+        self.emg_y_range_layout = QVBoxLayout()
+        self.emg_y_range_explanation = QLabel("Set the Y range for the EMG plot.")
+        self.emg_y_range_explanation.setWordWrap(True)
+        self.emg_y_range_min = QSpinBox()
+        self.emg_y_range_min.setRange(-10000, 0)
+        self.emg_y_range_min.setValue(-600)
+        self.emg_y_range_min.valueChanged.connect(lambda: self.selected_emg_plot.setYRange(self.emg_y_range_min.value(), self.emg_y_range_max.value()))
+        self.emg_y_range_max = QSpinBox()
+        self.emg_y_range_max.setRange(0, 10000)
+        self.emg_y_range_max.setValue(600)
+        self.emg_y_range_max.valueChanged.connect(lambda: self.selected_emg_plot.setYRange(self.emg_y_range_min.value(), self.emg_y_range_max.value()))
+        self.emg_y_range_layout.addWidget(self.emg_y_range_explanation)
+        self.emg_y_range_layout.addWidget(self.emg_y_range_min)
+        self.emg_y_range_layout.addWidget(self.emg_y_range_max)
+
+        # Ethogram ComboBox
         self.ethogram_labels = None
         self.etho_label_label = QLabel("Ethogram Labels", self)
         self.etho_label_input = QComboBox(self)
@@ -236,8 +255,9 @@ class SignalVisualizer(QMainWindow):
         # Set a container for the left panel
         self.input_layout = QVBoxLayout()
         self.input_container = QWidget()
-        self.input_container.setLayout(self.input_layout)
+        #self.input_container.setLayout(self.input_layout)
 
+        # General Controls
         self.input_layout.addWidget(self.freq_label)
         self.input_layout.addWidget(self.freq_input)
         self.input_layout.addWidget(self.range_label)
@@ -245,19 +265,63 @@ class SignalVisualizer(QMainWindow):
         self.input_layout.addWidget(self.time_input_label)
         self.input_layout.addWidget(self.time_input)
         self.input_layout.addWidget(self.jump_button)
-        self.input_layout.addWidget(self.electrode_label)
-        self.input_layout.addWidget(self.electrode_input)
-        self.input_layout.addWidget(self.emg_label)
-        self.input_layout.addWidget(self.emg_input)
-        self.input_layout.addWidget(self.etho_label_label)
-        self.input_layout.addWidget(self.etho_label_input)
-        self.input_layout.addWidget(self.autoscroll_checkbox)
-        self.input_layout.addWidget(self.spec_zoom_button)
-        self.input_layout.addWidget(self.reset_spec_zoom_button)
-        self.input_layout.addWidget(self.win_sec_label)
-        self.input_layout.addWidget(self.win_sec_input)
-        self.input_layout.addWidget(self.win_sec_button)
-        self.layout.addWidget(self.input_container)
+
+        # EEG Controls
+        self.eeg_group = QGroupBox("EEG Controls")
+        self.eeg_layout = QVBoxLayout()
+        self.eeg_layout.addWidget(self.electrode_label)
+        self.eeg_layout.addWidget(self.electrode_input)
+        self.eeg_group.setLayout(self.eeg_layout)
+        self.input_layout.addWidget(self.eeg_group)
+
+        # EMG Controls
+        self.emg_group = QGroupBox("EMG Controls")
+        self.emg_layout = QVBoxLayout()
+        self.emg_layout.addWidget(self.emg_label)
+        self.emg_layout.addWidget(self.emg_input)
+        self.emg_y_range_layout = QHBoxLayout()
+        self.emg_y_range_layout.addWidget(QLabel("Y Min:"))
+        self.emg_y_range_layout.addWidget(self.emg_y_range_min)
+        self.emg_y_range_layout.addWidget(QLabel("Y Max:"))
+        self.emg_y_range_layout.addWidget(self.emg_y_range_max)
+        self.emg_layout.addWidget(self.emg_y_range_explanation)
+        self.emg_layout.addLayout(self.emg_y_range_layout)
+        self.emg_group.setLayout(self.emg_layout)
+        self.input_layout.addWidget(self.emg_group)
+
+        # Ethogram Controls
+        self.etho_group = QGroupBox("Ethogram Controls")
+        self.etho_layout = QVBoxLayout()
+        self.etho_layout.addWidget(self.etho_label_label)
+        self.etho_layout.addWidget(self.etho_label_input)
+        self.etho_group.setLayout(self.etho_layout)
+        self.input_layout.addWidget(self.etho_group)
+
+        # Spectrogram Controls
+        self.spec_group = QGroupBox("Spectrogram Controls")
+        self.spec_layout = QVBoxLayout()
+        self.spec_layout.addWidget(self.spec_zoom_button)
+        self.spec_layout.addWidget(self.reset_spec_zoom_button)
+        self.spec_layout.addWidget(self.win_sec_label)
+        self.spec_layout.addWidget(self.win_sec_input)
+        self.spec_layout.addWidget(self.win_sec_button)
+        self.spec_layout.addWidget(self.autoscroll_checkbox)
+        self.spec_group.setLayout(self.spec_layout)
+        self.input_layout.addWidget(self.spec_group)
+
+        # Separator
+        self.separator = QFrame()
+        self.separator.setFrameShape(QFrame.HLine)
+        self.separator.setFrameShadow(QFrame.Sunken)
+        self.input_layout.addWidget(self.separator)
+
+        # Everything in the container into the layout
+        #self.layout.addWidget(self.input_container)
+        self.scroll_area = QScrollArea()
+        self.input_container = QWidget()
+        self.input_container.setLayout(self.input_layout)
+        self.scroll_area.setWidget(self.input_container)
+        self.layout.addWidget(self.scroll_area)
 
         # after adding all your widgets, add a spacer at the end
         spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
@@ -278,19 +342,24 @@ class SignalVisualizer(QMainWindow):
         # Get the ViewBox of the spectrogram plot and connect the sigRangeChanged signal
         self.spectrogram_plot.plotItem.vb.sigRangeChanged.connect(self.spectrogram_range_changed)
 
-
         # EMG Tab
         self.emg_tab_widget = QTabWidget()
 
-        # selected EMG
         self.selected_emg = QDockWidget("EMG", self)
         self.addDockWidget(Qt.RightDockWidgetArea, self.selected_emg)
         self.selected_emg_plot = pg.PlotWidget()  # Create a PlotWidget for the Selected EMG
         # RMS EMG
-        self.emg_rms_plot = pg.PlotWidget()  # Create a PlotWidget for the Selected EMG
+        self.emg_rms_plot = pg.PlotWidget()  # Create a PlotWidget for the RMS EMG
 
-        self.selected_emg.setWidget(self.emg_tab_widget) 
-        # The RMS first
+        # Add the Y range controls and tab widget to a vertical layout
+        self.emg_layout = QVBoxLayout()
+        self.emg_layout.addWidget(self.emg_tab_widget)
+        self.emg_container = QWidget()
+        self.emg_container.setLayout(self.emg_layout)
+
+        self.selected_emg.setWidget(self.emg_container)
+
+        # Add the tabs
         self.emg_tab_widget.addTab(self.emg_rms_plot, "RMS EMG")
         self.emg_tab_widget.addTab(self.selected_emg_plot, "Selected EMG")
 
@@ -302,7 +371,6 @@ class SignalVisualizer(QMainWindow):
         self.eeg = QDockWidget("EEG", self)
         self.addDockWidget(Qt.RightDockWidgetArea, self.eeg)
         self.eeg_plot = pg.PlotWidget()  # Create a PlotWidget for the EEG
-        # self.eeg.setWidget(self.eeg_plot)  # Set the PlotWidget as the dock widget's widget
         # Add the tab widget to the dock widget
         self.eeg.setWidget(self.tab_widget)
 
@@ -367,7 +435,13 @@ class SignalVisualizer(QMainWindow):
         self.setWindowIcon(QIcon('logo.png'))
         self.showMaximized()
         self.central_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+        #self.central_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.input_layout.addStretch(1)
+        self.input_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # eeg panel policy
         self.eeg.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # window policy
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         # Modals
         self.munge_dialog = QDialog(self)
@@ -558,6 +632,7 @@ class SignalVisualizer(QMainWindow):
 
         # Calculate multi-taper spectrogram
         nperseg = int(self.win_sec * self.sampling_frequency)
+        print(f"computing spectrogram with win_sec = {self.win_sec} and nperseg = {nperseg}")
         assert self.selected_electrode.size > 2 * nperseg, "Data length must be at least 2 * win_sec."
         f, t, Sxx = spectrogram_lspopt(self.selected_electrode, self.sampling_frequency, nperseg=nperseg, noverlap=0)
         Sxx = 10 * np.log10(Sxx)  # Convert uV^2 / Hz --> dB / Hz
@@ -639,7 +714,7 @@ class SignalVisualizer(QMainWindow):
         self.add_emg_diff()
         self.data_loaded = True
         # Determine the number of complete windows in the data
-        self.num_windows = self.data.shape[0] // (self.sampling_frequency * self.win_sec)
+        self.num_windows = int(self.data.shape[0] // (self.sampling_frequency * self.win_sec))
         # Initialize the ethogram_labels
         if self.ethogram_labels is None:
             self.ethogram_labels = np.zeros(self.num_windows, dtype=int)
@@ -777,9 +852,9 @@ class SignalVisualizer(QMainWindow):
 
 
     def move_right(self):
-        self.plot_from += self.sampling_frequency * self.win_sec
-        self.plot_to += self.sampling_frequency * self.win_sec
-        self.current_position = self.plot_from // (self.sampling_frequency * self.win_sec)
+        self.plot_from += int(self.sampling_frequency * self.win_sec)
+        self.plot_to += int(self.sampling_frequency * self.win_sec)
+        self.current_position = int(self.plot_from // (self.sampling_frequency * self.win_sec))
         self.update_current_time_input()
         if self.data_loaded:
             self.update_plots()
@@ -793,9 +868,9 @@ class SignalVisualizer(QMainWindow):
     def move_left(self):
         # prevent user from moving to negative
         if self.plot_from - self.sampling_frequency * self.win_sec >= 0:
-            self.plot_from -= self.sampling_frequency * self.win_sec
-            self.plot_to -= self.sampling_frequency * self.win_sec
-            self.current_position = self.plot_from // (self.sampling_frequency * self.win_sec)
+            self.plot_from -= int(self.sampling_frequency * self.win_sec)
+            self.plot_to -= int(self.sampling_frequency * self.win_sec)
+            self.current_position = int(self.plot_from // (self.sampling_frequency * self.win_sec))
             self.update_current_time_input()
             if self.data_loaded:
                 self.update_plots()
@@ -809,7 +884,7 @@ class SignalVisualizer(QMainWindow):
 
     def update_win_sec(self):
         try:
-            win_sec_value = int(self.win_sec_input.text())
+            win_sec_value = float(self.win_sec_input.text())#int(self.win_sec_input.text())
             self.win_sec = win_sec_value
             # Update time_range to be at least equal to win_sec
             if self.win_sec > self.time_range:
@@ -820,6 +895,7 @@ class SignalVisualizer(QMainWindow):
             if not self.data_loaded: 
                 return
             else:
+                self.spec_img = None  # Reset spec_img to force replot with new spectrogram data
                 # Recompute the spectrogram     
                 self.spectrogram = self.compute_spectrogram()
                 self.update_plots()
@@ -834,7 +910,7 @@ class SignalVisualizer(QMainWindow):
         self.time_range = self.range_input.value()
 
         # Compute buffer
-        self.plot_from_buffer = max(self.plot_from - self.win_sec * self.sampling_frequency, 0)
+        self.plot_from_buffer = max(int(round(self.plot_from - self.win_sec * self.sampling_frequency)), 0)
 
         # Compute x-axis for plot: use self.plot_from_buffer here
         self.plot_x_axis = self.sample_axis[self.plot_from_buffer:self.plot_to]
@@ -844,10 +920,13 @@ class SignalVisualizer(QMainWindow):
 
         # Create tick labels
         self.x_tick_labels = np.arange(0, self.plot_x_axis_time[-1], self.win_sec)
-        self.x_tick_labels_str = [str(timedelta(seconds=i)) for i in self.x_tick_labels]
+        self.x_tick_labels_str = [self.pretty_time_label(seconds = i) for i in self.x_tick_labels]
+
 
         # Create the tick positions for these labels in the sample domain
-        self.x_tick_positions = self.x_tick_labels * self.sampling_frequency
+        #self.x_tick_positions = self.x_tick_labels * self.sampling_frequency
+        self.x_tick_positions = [int(round(label * self.sampling_frequency)) for label in self.x_tick_labels]
+
 
         # Call the update function for each plot
         self.update_eeg_plot()
@@ -856,6 +935,10 @@ class SignalVisualizer(QMainWindow):
         self.update_ethogram_plot()
         self.update_power_plots()
 
+    def pretty_time_label(self, seconds):
+        # this function ensures that we have a format HH:MM:SS.f with only one decimal place
+        stamp = datetime.datetime(1,1,1) + timedelta(seconds = seconds)
+        return stamp.strftime('%H:%M:%S.%f')[:-5]
     # downsampling for x axis ticks
     def downsample(self, array, factor= 1):
         factor = self.sampling_frequency * factor
@@ -954,7 +1037,7 @@ class SignalVisualizer(QMainWindow):
         self.selected_emg_plot.plotItem.plot(self.plot_x_axis, emg_data, pen=pg.mkPen(color=(255, 255, 255), width=2))  # Plot in white
 
         # Deal with axes
-        self.selected_emg_plot.plotItem.autoRange()  # Force update the plot
+        #self.selected_emg_plot.plotItem.autoRange()  # Force update the plot <- this will update both x and y, not useful
         self.selected_emg_plot.getAxis("bottom").setTicks([list(zip(self.x_tick_positions, self.x_tick_labels_str))])
         self.selected_emg_plot.setLabel('left', "Electrical signal", units='uV')
 
@@ -965,8 +1048,6 @@ class SignalVisualizer(QMainWindow):
         start_pos = self.current_position * self.sampling_frequency * self.win_sec
         end_pos = (self.current_position + 1) * self.sampling_frequency * self.win_sec
         self.add_shaded_region(start_pos, end_pos)
-        # hardcoding 
-        #self.selected_emg_plot.setYRange(-600, 600)
     
     def update_x_axis_ticks(self):
         # Get current x-axis range
@@ -980,10 +1061,10 @@ class SignalVisualizer(QMainWindow):
             x_ticks_labels = [str(int(i/3600)) for i in x_ticks_seconds]  # convert seconds to hours
             downsample_factor = 3600 / self.sampling_frequency  # we need to divide by sampling frequency because it gets multiplied by it at self.downsample
         elif range_seconds > 1000:  # if the range is less than or equal to an hour, use HH:MM:SS format
-            x_ticks_labels = [str(timedelta(seconds=i)) for i in x_ticks_seconds]
+            x_ticks_labels = [self.pretty_time_label(seconds = i) for i in x_ticks_seconds]
             downsample_factor = 100  / self.sampling_frequency # adjust this value as needed
         else:
-            x_ticks_labels = [str(timedelta(seconds=i)) for i in x_ticks_seconds]
+            x_ticks_labels = [self.pretty_time_label(seconds = i) for i in x_ticks_seconds]
             downsample_factor = 5 / self.sampling_frequency
 
 
@@ -1086,9 +1167,9 @@ class SignalVisualizer(QMainWindow):
     def update_ethogram_plot(self):
         self.ethogram_plot.clear()  # Clear previous plots
         # Compute buffer in window units
-        plot_from_window_units_buffer = self.plot_from_buffer // (self.win_sec * self.sampling_frequency)
+        plot_from_window_units_buffer = int(round(self.plot_from_buffer // (self.win_sec * self.sampling_frequency)))
         # Convert plot_to from sample units to window units
-        plot_to_window_units = self.plot_to // (self.win_sec * self.sampling_frequency)
+        plot_to_window_units = int(round(self.plot_to // (self.win_sec * self.sampling_frequency)))
 
         # Calculate the lengths and values of consecutive segments in the ethogram labels
         lengths, values = self.rle(self.ethogram_labels[plot_from_window_units_buffer:plot_to_window_units])
