@@ -96,46 +96,53 @@ def plot_spectrogram(eeg, hypno, epoch_sec = 2):
                       trimperc = 1)
   fig.show()
 
+def  predict_and_save(epoch_sec):
+    console.log("Choose downsampled EEG file")
+    eeg_file = ui_find_file(title="Choose downsampled EEG file", initialdir=os.path.expanduser("~"))
+    session_folder = os.path.dirname(eeg_file)
+    animal_id = parse_bids_subject(os.path.basename(eeg_file))
+    session = parse_bids_session(os.path.basename(eeg_file))
+    # eeg_file = list_files(pattern  ="eegdata_desc-down-*_eeg.csv.gz")
+    eeg_df = pl.read_csv(eeg_file)
+    sf = 100
+    results = {}
 
-console.log("Choose downsampled EEG file")
-eeg_file = ui_find_file(title="Choose downsampled EEG file", initialdir=os.path.expanduser("~"))
-session_folder = os.path.dirname(eeg_file)
-animal_id = parse_bids_subject(os.path.basename(eeg_file))
-session = parse_bids_session(os.path.basename(eeg_file))
-# eeg_file = list_files(pattern  ="eegdata_desc-down-*_eeg.csv.gz")
-eeg_df = pl.read_csv(eeg_file)
-sf = 100
-results = {}
+    for column in eeg_df.columns:
+        if column.startswith('EEG'):
+            eeg = eeg_df[column].to_numpy()
+            
+            # Calculate EMG difference for each EEG channel
+            #emg_diff = eeg_df['EMG2'] - eeg_df['EMG1']
+            emg_diff = eeg_df["EMG1"]
+            # Perform prediction and plot spectrogram for the EEG channel
+            hypno, proba = predict_electrode(eeg=eeg, emg=emg_diff, epoch_sec=epoch_sec)
+            plot_spectrogram(eeg, hypno)
+            
+            # Store hypno and proba in the results dictionary under the column key
+            results[column] = {"hypno": hypno, "proba": proba}
 
-for column in eeg_df.columns:
-    if column.startswith('EEG'):
-        eeg = eeg_df[column].to_numpy()
-        
-        # Calculate EMG difference for each EEG channel
-        emg_diff = eeg_df['EMG2'] - eeg_df['EMG1']
-        
-        # Perform prediction and plot spectrogram for the EEG channel
-        hypno, proba = predict_electrode(eeg, emg_diff)
-        plot_spectrogram(eeg, hypno)
-        
-        # Store hypno and proba in the results dictionary under the column key
-        results[column] = {"hypno": hypno, "proba": proba}
+    hypno_predictions_df = aggregate_hypno_predictions(results)
+    max_probabilities_df = get_max_probabilities(results)
 
-hypno_predictions_df = aggregate_hypno_predictions(results)
-max_probabilities_df = get_max_probabilities(results)
+    mfv = get_most_frequent_value(hypno_predictions_df)
+    consensus = consensus_prediction(hypno_predictions_df, max_probabilities_df)
 
-mfv = get_most_frequent_value(hypno_predictions_df)
-consensus = consensus_prediction(hypno_predictions_df, max_probabilities_df)
+    output_df = pd.DataFrame({'consensus': consensus, 'mfv' : mfv}).apply(yasa.hypno_int_to_str)
 
-output_df = pd.DataFrame({'consensus': consensus, 'mfv' : mfv}).apply(yasa.hypno_int_to_str)
+    # Saving data 
+    output_fn = bids_naming(session_folder, animal_id, session, 'consensus_mfv_predictions.csv.gz')
+    output_df.to_csv(output_fn, index=False)
+    console.success(f"Wrote consensus predictions to {output_fn}")
+    hypno_fn = bids_naming(session_folder, animal_id, session, 'hypno_predictions.csv.gz')
+    hypno_predictions_df.to_csv(hypno_fn, index=False)
+    console.success(f"Wrote predictions to {hypno_fn}")
+    proba_fn = bids_naming(session_folder, animal_id, session, 'max_probabilities.csv.gz')
+    max_probabilities_df.to_csv(proba_fn, index=False)
+    console.success(f"Wrote probas to {proba_fn}")
 
-# Saving data 
-output_fn = bids_naming(session_folder, animal_id, session, 'consensus_mfv_predictions.csv.gz')
-output_df.to_csv(output_fn, index=False)
-console.success(f"Wrote consensus predictions to {output_fn}")
-hypno_fn = bids_naming(session_folder, animal_id, session, 'hypno_predictions.csv.gz')
-hypno_predictions_df.to_csv(hypno_fn, index=False)
-console.success(f"Wrote predictions to {hypno_fn}")
-proba_fn = bids_naming(session_folder, animal_id, session, 'max_probabilities.csv.gz')
-max_probabilities_df.to_csv(proba_fn, index=False)
-console.success(f"Wrote probas to {proba_fn}")
+if __name__ == '__main__':
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--epoch_sec", required=True, help="Epoch for sleep predictions in seconds. Ideally, it matches the classifier epoch_sec")
+  args = parser.parse_args()
+  epoch_sec = args.epoch_sec
+  predict_and_save(epoch_sec)
