@@ -284,6 +284,3 @@ compute_hilbert <- function(electrode, sampling_frequency) {
   envelopes <- dplyr::bind_cols(envelopes)
   return(envelopes)
 }
-
-compute_hilbert(eeg$EEG1[1:1000], 100)
-

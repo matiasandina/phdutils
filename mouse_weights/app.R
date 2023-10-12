@@ -184,8 +184,6 @@ server <- function(input, output, session) {
       animal_id(animal_id_value)
       
       loaded_data <- readr::read_csv(full_path)
-      # Initialize it 
-      mouse_data <- reactiveVal(initial_tibble())
       mouse_data(loaded_data) # Update reactive value
       # Enable the submit button once the file is loaded
       shinyjs::enable("submitButton")
@@ -240,12 +238,11 @@ server <- function(input, output, session) {
     # arrange by datetime
     updated_data <- dplyr::arrange(updated_data, datetime)
     mouse_data(updated_data) # Update reactive value
-    
     output$dataTable <- DT::renderDT({
       pre <- mouse_data() %>% dplyr::select(id, datetime, everything())
       DT::datatable(pre) %>%
         # format utc_datetime in locale string instead of Z time ("toISOString")
-        formatDate(2, "toLocaleString")
+        DT::formatDate(2, "toLocaleString")
     })
     if (nrow(mouse_data()) > 2) {
       p <- plot_weight_data(mouse_data())
