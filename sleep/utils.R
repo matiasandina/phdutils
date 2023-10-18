@@ -21,7 +21,8 @@ convert_accusleep_labels <- function(col){
 
 
 convert_yasa_int <- function(col){
-  '[‘W’, ‘N1’, ‘N2’, ‘N3’, ‘R’] ==> [0, 1, 2, 3, 4]'
+  # We are doing this conversion
+  # '[0, 1, 2, 3, 4] ==> [‘W’, ‘N1’, ‘N2’, ‘N3’, ‘R’]'
   assertthat::assert_that(is.integer(col),
                           msg = glue::glue("`col` must be integer, received `{class(col)}`"))
   return(
