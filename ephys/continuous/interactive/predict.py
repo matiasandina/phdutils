@@ -10,6 +10,7 @@ import polars as pl
 from rlist_files import list_files
 from py_console import console
 from utils import *
+import argparse
 
 def parse_bids_subject(string: str):
   return string.split("_")[0].replace("sub-", "")
@@ -104,7 +105,6 @@ def  predict_and_save(epoch_sec):
     session = parse_bids_session(os.path.basename(eeg_file))
     # eeg_file = list_files(pattern  ="eegdata_desc-down-*_eeg.csv.gz")
     eeg_df = pl.read_csv(eeg_file)
-    sf = 100
     results = {}
 
     for column in eeg_df.columns:
@@ -116,7 +116,7 @@ def  predict_and_save(epoch_sec):
             emg_diff = eeg_df["EMG1"]
             # Perform prediction and plot spectrogram for the EEG channel
             hypno, proba = predict_electrode(eeg=eeg, emg=emg_diff, epoch_sec=epoch_sec)
-            plot_spectrogram(eeg, hypno)
+            #plot_spectrogram(eeg, hypno)
             
             # Store hypno and proba in the results dictionary under the column key
             results[column] = {"hypno": hypno, "proba": proba}
@@ -142,7 +142,11 @@ def  predict_and_save(epoch_sec):
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
-  parser.add_argument("--epoch_sec", required=True, help="Epoch for sleep predictions in seconds. Ideally, it matches the classifier epoch_sec")
+  parser.add_argument("--epoch_sec", type=float, required=True, help="Epoch for sleep predictions in seconds. Ideally, it matches the classifier epoch_sec")
   args = parser.parse_args()
   epoch_sec = args.epoch_sec
+  # Caution hard-coded!
+  sf = 100
+  console.warn(f'sf = 100 is hardcoded!')
+  console.log(f'Running `predict.py` with sf={sf} and epoch_sec={args.epoch_sec}')
   predict_and_save(epoch_sec)

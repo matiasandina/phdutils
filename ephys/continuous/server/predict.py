@@ -120,8 +120,8 @@ def run_and_save_predictions(animal_id, date, epoch_sec, display=False ):
     if column.startswith('EEG'):
         eeg = eeg_df[column].to_numpy()
         # Calculate EMG difference for each EEG channel
-        #emg_diff = eeg_df["EMG1"]
-        emg_diff = eeg_df['EMG2'] - eeg_df['EMG1']
+        emg_diff = eeg_df["EMG1"]
+        #emg_diff = eeg_df['EMG2'] - eeg_df['EMG1']
         # Perform prediction and plot spectrogram for the EEG channel
         hypno, proba = predict_electrode(eeg=eeg, emg=emg_diff, epoch_sec=epoch_sec)
         #plot_spectrogram(eeg, hypno)
@@ -199,9 +199,9 @@ if __name__ == '__main__':
     type=datetime.date.fromisoformat,
     help="Date that wants to be analized yyyy-mm-dd, used to construct folder path (/path_to_storage/animal_id/date/eeg/)")
   parser.add_argument('--config_folder', help='Path to the config folder')
-  parser.add_argument("--epoch_sec", required=True, help="Epoch for sleep predictions in seconds. Ideally, it matches the classifier epoch_sec")
+  parser.add_argument("--epoch_sec", type=float, required=True, help="Epoch for sleep predictions in seconds. Ideally, it matches the classifier epoch_sec")
   args = parser.parse_args()
   config = read_config(args.config_folder)
   sf = config['down_freq_hz']
-  console.log(f'Running `predict.py` with sf={sf}')
+  console.log(f'Running `predict.py` with sf={sf} and epoch_sec={args.epoch_sec}')
   run_and_save_predictions(args.animal_id, args.date, args.epoch_sec)  
