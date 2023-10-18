@@ -185,6 +185,23 @@ class SignalVisualizer(QMainWindow):
         self.emg_selected = False
         self.emg_input.currentTextChanged.connect(self.select_emg)
 
+        # Explanation and controls for setting EEG Y range
+        self.eeg_y_range_controls = QWidget()
+        self.eeg_y_range_layout = QVBoxLayout()
+        self.eeg_y_range_explanation = QLabel("Set the Y range for the EEG plot.")
+        self.eeg_y_range_explanation.setWordWrap(True)
+        self.eeg_y_range_min = QSpinBox()
+        self.eeg_y_range_min.setRange(-10000, 0)
+        self.eeg_y_range_min.setValue(-600)
+        self.eeg_y_range_min.valueChanged.connect(lambda: self.selected_electrode_plot.setYRange(self.eeg_y_range_min.value(), self.eeg_y_range_max.value()))
+        self.eeg_y_range_max = QSpinBox()
+        self.eeg_y_range_max.setRange(0, 10000)
+        self.eeg_y_range_max.setValue(600)
+        self.eeg_y_range_max.valueChanged.connect(lambda: self.selected_electrode_plot.setYRange(self.eeg_y_range_min.value(), self.eeg_y_range_max.value()))
+        self.eeg_y_range_layout.addWidget(self.eeg_y_range_explanation)
+        self.eeg_y_range_layout.addWidget(self.eeg_y_range_min)
+        self.eeg_y_range_layout.addWidget(self.eeg_y_range_max)
+
         # Explanation and controls for setting EMG Y range
         self.emg_y_range_controls = QWidget()
         self.emg_y_range_layout = QVBoxLayout()
@@ -271,6 +288,13 @@ class SignalVisualizer(QMainWindow):
         self.eeg_layout = QVBoxLayout()
         self.eeg_layout.addWidget(self.electrode_label)
         self.eeg_layout.addWidget(self.electrode_input)
+        self.eeg_y_range_layout = QHBoxLayout()
+        self.eeg_y_range_layout.addWidget(QLabel("Y Min:"))
+        self.eeg_y_range_layout.addWidget(self.eeg_y_range_min)
+        self.eeg_y_range_layout.addWidget(QLabel("Y Max:"))
+        self.eeg_y_range_layout.addWidget(self.eeg_y_range_max)
+        self.eeg_layout.addWidget(self.eeg_y_range_explanation)
+        self.eeg_layout.addLayout(self.eeg_y_range_layout)
         self.eeg_group.setLayout(self.eeg_layout)
         self.input_layout.addWidget(self.eeg_group)
 
@@ -672,10 +696,22 @@ class SignalVisualizer(QMainWindow):
     def select_etho_label(self):
         if self.check_selections() is False:
             print("Waiting For EEG/EMG data to be loaded")
-        else:    
+        else:
             selected_column = self.etho_label_input.currentText()
+            if not selected_column:
+                print("No column selected.")
+                return    
+            unique_values_dict = {}
+            for col_name in self.ann_data.columns:
+                unique_vals = np.unique(self.ann_data.select(pl.col(col_name)).to_numpy().squeeze())
+                unique_vals_str = list(map(str, unique_vals))
+                unique_values_dict[col_name] = unique_vals_str
+                print("These are the unique labels in the data")
+                print(f"{col_name} : {unique_vals_str}")    
+            #self.ethogram_labels = self.ann_data.select(pl.col(selected_column)).to_numpy().squeeze()
+            #unique_values = list(map(str, np.unique(self.ethogram_labels)))
             self.ethogram_labels = self.ann_data.select(pl.col(selected_column)).to_numpy().squeeze()
-            unique_values = list(map(str, np.unique(self.ethogram_labels)))
+            unique_values = unique_values_dict.get(selected_column, [])
 
             # Check if the mapping is already set
             if not hasattr(self, 'user_mapping') or not self.user_mapping:
@@ -747,7 +783,9 @@ class SignalVisualizer(QMainWindow):
     #    return np.sqrt(np.convolve(signal2, window, 'valid'))
 
     def window_rms(self, signal, window_size):
-        num_segments = len(signal) // window_size
+        # let's make sure window_size is an int here
+        window_size = int(window_size)
+        num_segments = int(len(signal) // window_size)
         rms_values = np.zeros(num_segments)
         for i in range(num_segments):
             segment = signal[i * window_size: (i + 1) * window_size]
