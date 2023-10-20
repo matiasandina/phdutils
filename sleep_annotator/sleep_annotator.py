@@ -274,7 +274,20 @@ class SignalVisualizer(QMainWindow):
         self.input_container = QWidget()
         #self.input_container.setLayout(self.input_layout)
 
+        # Add a QLabel widget to display the loaded filename
+        self.filename_label = QLabel("No File Loaded")
+        self.filename_label.setToolTip("No File Loaded")
+
+        # Apply a custom style sheet to make the QLabel distinct
+        self.filename_label.setStyleSheet("""
+            background-color: #FF5733; /* Choose a background color that stands out */
+            color: #ffffff; /* Text color */
+            padding: 5px; /* Add some padding for spacing */
+            border: 2px solid #FF5733; /* Add a border */
+            """)
+
         # General Controls
+        self.input_layout.addWidget(self.filename_label) # filename first
         self.input_layout.addWidget(self.freq_label)
         self.input_layout.addWidget(self.freq_input)
         self.input_layout.addWidget(self.range_label)
@@ -451,6 +464,11 @@ class SignalVisualizer(QMainWindow):
             # The lambda value=value bit is a way to "freeze" the current value of value to be used inside the annotate method. This is necessary because otherwise, Python's late binding behavior would cause all shortcuts to use the last value of value.
             shortcut.activated.connect(lambda key=key: self.annotate(key))
 
+        # Key binding for the space bar
+        self.space_bar_n = 4 # number of periods to do space_bar_n * self.win_sec
+        self.space_bar_shortcut = QShortcut(QKeySequence(Qt.Key_Space), self)
+        self.space_bar_shortcut.activated.connect(self.jump_space_bar)
+
         # Updating/listeners
         self.range_input.valueChanged.connect(self.update_position)
         self.freq_input.valueChanged.connect(self.update_position)
@@ -506,6 +524,8 @@ class SignalVisualizer(QMainWindow):
             self.load_thread.dataLoaded.connect(self.set_data)
             self.load_thread.finished.connect(self.download_dialog.accept)  # Close the dialog when the thread finishes
             self.load_thread.start()
+            self.filename_label.setText(f"Loaded File: {os.path.basename(filename)}")  # Update the QLabel with the loaded filename
+            self.filename_label.setToolTip(os.path.basename(filename)) 
     
     def load_ann_data(self):
         try:
@@ -702,11 +722,11 @@ class SignalVisualizer(QMainWindow):
                 print("No column selected.")
                 return    
             unique_values_dict = {}
+            print("These are the unique labels in the data")
             for col_name in self.ann_data.columns:
                 unique_vals = np.unique(self.ann_data.select(pl.col(col_name)).to_numpy().squeeze())
                 unique_vals_str = list(map(str, unique_vals))
                 unique_values_dict[col_name] = unique_vals_str
-                print("These are the unique labels in the data")
                 print(f"{col_name} : {unique_vals_str}")    
             #self.ethogram_labels = self.ann_data.select(pl.col(selected_column)).to_numpy().squeeze()
             #unique_values = list(map(str, np.unique(self.ethogram_labels)))
@@ -887,6 +907,17 @@ class SignalVisualizer(QMainWindow):
             self.add_vertical_line(self.current_position * self.sampling_frequency * self.win_sec)
             self.add_shaded_region(start_pos, end_pos)
             self.update_plots()
+
+    # Define the jump_space_bar function to perform the space bar action
+    def jump_space_bar(self):
+        current_time_sec = self.plot_from / self.freq_input.value()
+        # Calculate the time to jump forward by self.space_bar_n * self.win_sec
+        jump_time_seconds = self.space_bar_n * self.win_sec 
+        next_time_seconds = current_time_sec + jump_time_seconds
+        next_time = str(timedelta(seconds=next_time_seconds))
+        # now use x_time as your input for the time jump
+        self.time_input.setText(next_time)
+        self.jump_to_time()
 
 
     def move_right(self):
