@@ -164,7 +164,7 @@ spectro <- function(data, sf, nfft=1024, window=256, overlap=128, t0=0, plot_spe
   
   out_plot <- 
     ggplot(S, aes(time, f, fill = power)) + 
-    geom_tile(show.legend = F) +
+    geom_tile(...) +
     scale_fill_viridis_c(...) +
     labs(y = "Freq (Hz)") 
   return(out_plot)
@@ -209,6 +209,58 @@ get_ethogram <- function(data, x, behaviour, sampling_period = NULL){
   
   return(etho)
 }
+
+# This function is equivalent to get_ethogram
+# but it makes it easy to replace short epochs in place
+# you need to call get_ethogram() again to get proper durations with small events removed
+# we do nacf unless not possible, when we use the next observation to fill short epochs
+replace_short_behaviors <- function(data, x, behaviour, sampling_period = NULL, threshold = list(global = 3, NREM = 8, REM = 4)){
+  if (is.null(sampling_period)){
+    cli::cli_alert_warning("`sampling_period` not provided.")
+    sampling_period <- min(diff(dplyr::pull(data, {{x}})))
+    cli::cli_inform(glue::glue("Sampling period estimated to {sampling_period} using min difference between observations"))
+  }
+  
+  # Helper function to get the threshold for a behavior
+  get_threshold <- function(behavior_name, threshold_list) {
+    if (!is.null(threshold_list[[behavior_name]])) {
+      return(threshold_list[[behavior_name]])
+    } else {
+      return(threshold_list[["global"]])
+    }
+  }
+  
+  data <- data %>% 
+    dplyr::mutate(run_id = vctrs::vec_identify_runs({{behaviour}}),
+                  behaviour = {{behaviour}})
+  
+  etho <- data %>% 
+    dplyr::group_by(run_id) %>% 
+    dplyr::summarise(
+      behaviour = dplyr::first({{behaviour}}),
+      xend = dplyr::last({{x}}) + sampling_period,
+      x = dplyr::first({{x}}),
+      duration = xend - x,
+      .groups = "drop"
+    ) %>%
+    # Calculate the appropriate threshold for each behavior
+    dplyr::mutate(threshold = purrr::map_dbl(behaviour, get_threshold, threshold_list = threshold)) %>%
+    # Identify short-duration behaviors and set to NA based on threshold
+    dplyr::mutate(behaviour = dplyr::if_else(duration < threshold, NA_character_, behaviour)) %>%
+    dplyr::ungroup()
+  
+  # Replace the short-duration behaviors with NA in the original data
+  data <- data %>%
+    dplyr::left_join(etho %>% dplyr::select(run_id, behaviour), by = "run_id") %>%
+    # Now fill NA with the previous non-NA value
+    # If prev value is not available (very first obs) use posterior value
+    tidyr::fill(behaviour.y, .direction = "downup") %>%
+    dplyr::rename(nacf_behaviour = behaviour.y) %>% 
+    dplyr::select(-run_id, -behaviour.x)
+  
+  return(data)
+}
+
 
 # This function is intended to grab outside data and filter passing a nested .x with x$x and x$xend
 filter_tranges <- function(data, .x, right_end = NULL){
