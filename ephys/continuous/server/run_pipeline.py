@@ -37,7 +37,7 @@ def run_pipeline(start_date=None, animal_id=None):
             command = f"python3 02-bonsai_ttl_alignment.py --session_folder {os.path.dirname(ttl_folder_path)} --config_folder {base_folder}"
             os.system(command)
         # do the prediction
-        command = f"python3 predict.py --animal_id {animal_id} --date {folder} --config_folder {base_folder}"
+        command = f"python3 predict.py --animal_id {animal_id} --date {folder} --config_folder {base_folder} --epoch_sec 2.5"
         os.system(command)
         # Print a newline for separation between iterations
         console.log(f"Finished folder {folder}")
