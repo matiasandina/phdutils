@@ -125,7 +125,49 @@ smooth_mode <- function(x, width=3){
 }
 
 
-# Plotting ----------------------------------------------------------------
+# Spectral analysis -------------------------------------------------------
+
+# helper to do extractions from gsignal::pwelch class
+extract_spectrum_data <- function(spec, name = "Spectrum") {
+  data.frame(Frequency = spec$freq, Power = spec$spec, Spectrum = name)
+}
+
+plot_spectra <- function(spectra_list, names = NULL) {
+  # If no names provided, use default names
+  if (is.null(names)) {
+    names <- paste("Spectrum", seq_along(spectra_list))
+  }
+  
+  # Combine the list of spectra into a single data frame using map_df
+  spectra_df <- map_df(seq_along(spectra_list), function(i) {
+    extract_spectrum_data(spectra_list[[i]], names[i])
+  })
+  
+  # resolution will be sasmpling_frequency / nfft 
+  # we can calculate with sf / (length(spec_result$window) / 2)
+  freq_resolutions <- map_dbl(
+    spectra_list,
+    function(tt){tt$fs / (length(tt$window) / 2)}
+  )
+  
+  freq_resolutions <- paste(
+    "Frequency Resolution ", 
+    names, 
+    "=",
+    signif(freq_resolutions, 3), collapse = ", ")
+  
+  # Create the ggplot
+  p <- ggplot(spectra_df, 
+              aes(x = Frequency, y = Power, color = Spectrum)) +
+    geom_line() +
+    xlab("Frequency (Hz)") +
+    ylab("Power (μV²/Hz)") +
+    labs(caption = paste(freq_resolutions))
+  
+  return(p)
+}
+
+
 # This is not a multi-taper spectrogram but it's OK
 spectro <- function(data, sf, nfft=1024, window=256, overlap=128, t0=0, plot_spec = T, normalize = F, return_data = F, ...){
   
@@ -170,6 +212,100 @@ spectro <- function(data, sf, nfft=1024, window=256, overlap=128, t0=0, plot_spe
   return(out_plot)
 }
 
+# Function to compute Welch power spectrum
+welch_spectrum <- function(data, 
+                           sampling_frequency, 
+                           window_length = NULL, 
+                           overlap = 0.5, 
+                           detrend = "long-mean") {
+  if (is.null(window_length)) {
+    window_length <- pracma::nextpow2(sqrt(length(data)))  # Default window length
+  }
+  
+  # Compute Welch power spectrum
+  spec <- gsignal::pwelch(data, 
+                          window = window_length, 
+                          overlap = overlap, 
+                          nfft = window_length, 
+                          fs = sampling_frequency, 
+                          detrend = detrend, 
+                          range = "half")
+  
+  return(spec)
+}
+
+# This function implements trapezoidal summation of the power spectrum
+#' @param spec power spectrum as calculated from
+#' @param bands power bands to be used in the shape of a named list. For example, `list("delta" = c(0.5, 4), "theta" = c(5, 11))`
+#' @param normalize whether to normalize the band powers using the total power in the power spectrum (default = `TRUE`).
+#' @seealso [gsignal::pwelch(), pracma::trapaz()]
+power_in_bands <- function(spec, bands, normalize=TRUE) {
+  # Extract full spectrum data
+  spec_data <- extract_spectrum_data(spec)
+  total_power <- pracma::trapz(spec_data$Frequency, spec_data$Power)
+  
+  # Calculate power in each band
+  
+  band_powers <- map(names(bands),
+                     function(band_name){
+                       band_range <- bands[[band_name]]
+                       # filter data in band
+                       band_data <- spec_data %>%
+                         dplyr::filter(
+                           dplyr::between(Frequency,
+                                          min(band_range),
+                                          max(band_range))
+                         )
+                       # Calculate power using the trapezoidal rule
+                       power <- pracma::trapz(band_data$Frequency, band_data$Power)
+                       return(
+                         data.frame(Band = band_name, 
+                                    Power = power))
+                     }) %>% 
+    bind_rows()
+  
+  if(isTRUE(normalize)){
+    band_powers$Power <- band_powers$Power / total_power
+  }
+  
+  return(band_powers)
+}
+
+
+# This function can be useful to compute power envelopes
+compute_hilbert <- function(electrode, sampling_frequency) {
+  bands <- list(
+    "delta" = c(0.5, 4),
+    "theta" = c(4, 8),
+    "sigma" = c(8, 15)
+  )
+  
+  envelopes <- list()
+  for (band in names(bands)) {
+    low <- bands[[band]][1]
+    high <- bands[[band]][2]
+    
+    # Apply bandpass filter
+    wpass <- c(low, high) / (sampling_frequency / 2)
+    sos <- gsignal::butter(10, wpass, type='pass', output='Sos')
+    filtered <- gsignal::sosfilt(sos$sos, electrode)
+
+    # Apply Hilbert transform to get the envelope (i.e., the amplitude) of the signal
+    analytic_signal <- gsignal::hilbert(filtered)
+    amplitude_envelope <- Mod(analytic_signal)
+    
+    # Store the envelope in the DataFrame
+    envelopes[[band]] <- amplitude_envelope
+  }
+  
+  envelopes <- dplyr::bind_cols(envelopes)
+  return(envelopes)
+}
+
+
+
+# Plot traces -------------------------------------------------------------
+
 plot_trace <- function(df, x, y, trange, ...){
   p1 <- ggplot(df %>% 
                  filter(data.table::between({{x}},
@@ -181,6 +317,9 @@ plot_trace <- function(df, x, y, trange, ...){
     xlab("")
   return(p1)
 }
+
+
+# Ethogram behaviors ------------------------------------------------------
 
 get_ethogram <- function(data, x, behaviour, sampling_period = NULL){
   if (is.null(sampling_period)){
@@ -261,6 +400,25 @@ replace_short_behaviors <- function(data, x, behaviour, sampling_period = NULL, 
   return(data)
 }
 
+#' @description
+#'  This function is intended use time ranges in one nested tibble in order to filter
+#'  data from another tibble. Both tibbles should have the same `time_col` (otherwise be aligned in time)
+#' @param external_data data to be filtered and merged with the nested dataset providing tranges
+#' @examples
+#' data %>% get_ethogram(...) %>% 
+#'   nest(data = -run_id) %>% 
+#'   mutate(eeg_traces = map(data, 
+#'                           function(.x) filter_eeg_tranges(eeg_data, .x, time_sec)))
+#' 
+filter_eeg_tranges <- function(external_data, tranges, time_col){
+  external_data %>%  
+    filter(data.table::between({{time_col}}, 
+                               lower = tranges$x, 
+                               upper = tranges$xend)) %>%
+    mutate(rel_time = {{time_col}} - dplyr::first({{time_col}}))
+  
+}
+
 
 # This function is intended to grab outside data and filter passing a nested .x with x$x and x$xend
 filter_tranges <- function(data, .x, right_end = NULL){
@@ -304,36 +462,3 @@ check_run_time <- function(data, id){
 }
 
 
-# 
-library(pracma)
-library(dplyr)
-
-compute_hilbert <- function(electrode, sampling_frequency) {
-  bands <- list(
-    "delta" = c(0.5, 4),
-    "theta" = c(4, 8),
-    "sigma" = c(8, 15)
-  )
-  
-  envelopes <- list()
-  for (band in names(bands)) {
-    low <- bands[[band]][1]
-    high <- bands[[band]][2]
-    
-    # Apply bandpass filter
-    wpass <- c(low, high) / (sampling_frequency / 2)
-    sos <- gsignal::butter(10, wpass, type='pass', output='Sos')
-    filtered <- gsignal::sosfilt(sos$sos, electrode)
-    print(filtered[1:5])
-    
-    # Apply Hilbert transform to get the envelope (i.e., the amplitude) of the signal
-    analytic_signal <- gsignal::hilbert(filtered)
-    amplitude_envelope <- Mod(analytic_signal)
-    
-    # Store the envelope in the DataFrame
-    envelopes[[band]] <- amplitude_envelope
-  }
-  
-  envelopes <- dplyr::bind_cols(envelopes)
-  return(envelopes)
-}
