@@ -462,3 +462,79 @@ check_run_time <- function(data, id){
 }
 
 
+# parsing events ----------------------------------------------------------
+
+
+# bids naming -------------------------------------------------------------
+
+#' Parse BIDS Subject
+#'
+#' Extracts the subject ID from a BIDS-compliant string or a vector of strings.
+#'
+#' @param string A character string or a vector of character strings in BIDS format.
+#' @return A character string or a character vector representing the subject IDs.
+#' @export
+#' @examples
+#' parse_bids_subject("sub-01_ses-02_task-rest_bold.nii")
+#' parse_bids_subject(c("sub-01_ses-02_task-rest_bold.nii", "sub-02_ses-03_task-rest_bold.nii"))
+parse_bids_subject <- function(string) {
+  if (length(string) > 1) {
+    return(sapply(string, parse_bids_subject))
+  }
+  sub("sub-", "", strsplit(string, "_")[[1]][1])
+}
+
+#' Parse BIDS Session
+#'
+#' Extracts the session ID from a BIDS-compliant string or a vector of strings.
+#'
+#' @param string A character string or a vector of character strings in BIDS format.
+#' @return A character string or a character vector representing the session IDs.
+#' @export
+#' @examples
+#' parse_bids_session("sub-01_ses-02_task-rest_bold.nii")
+#' parse_bids_session(c("sub-01_ses-02_task-rest_bold.nii", "sub-02_ses-03_task-rest_bold.nii"))
+parse_bids_session <- function(string) {
+  if (length(string) > 1) {
+    return(sapply(string, parse_bids_session))
+  }
+  sub("ses-", "", strsplit(string, "_")[[1]][2])
+}
+
+#' Parse BIDS Session Date-Time
+#'
+#' Extracts and converts the session date-time from a BIDS-compliant string or a vector of strings.
+#'
+#' @param strings A character string or a vector of character strings in BIDS format.
+#' @param orders The format orders for date-time parsing.
+#' @return A POSIXct date-time vector with preserved names.
+#' @importFrom lubridate parse_date_time
+#' @export
+#' @examples
+#' parse_bids_session_datetime(c("sub-01_ses-20230806T090636_task-rest_bold.nii", 
+#'                               "sub-02_ses-20230807T090647_task-rest_bold.nii"))
+parse_bids_session_datetime <- function(strings, orders = "ymdHMS") {
+  session_strings <- parse_bids_session(strings)
+  parsed_dates <- lapply(session_strings, lubridate::parse_date_time, orders = orders)
+  parsed_dates <- do.call(c, parsed_dates)
+  return(parsed_dates)
+}
+
+#' BIDS Naming
+#'
+#' Creates a BIDS-compliant filename from given parameters.
+#'
+#' @param session_folder The path to the session folder.
+#' @param subject_id The subject ID.
+#' @param session_date The date of the session.
+#' @param filename The original filename.
+#' @return A character string or a character vector representing the BIDS-compliant paths and filenames.
+#' @export
+#' @examples
+#' bids_naming("data", "01", "2023-01-01", "task-rest_bold.nii")
+bids_naming <- function(session_folder, subject_id, session_date, filename) {
+  session_date <- gsub("-", "", session_date)
+  file.path(session_folder, paste0("sub-", subject_id, "_ses-", session_date, "_", filename))
+}
+
+
