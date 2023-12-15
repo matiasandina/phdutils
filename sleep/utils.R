@@ -496,6 +496,12 @@ parse_bids_subject <- function(string) {
 #' parse_bids_session(c("sub-01_ses-02_task-rest_bold.nii", "sub-02_ses-03_task-rest_bold.nii"))
 parse_bids_session <- function(string) {
   if (length(string) > 1) {
+    # TODO: we might need to do some better checks here on string
+    # is it a file name? does it have the expected pattern!? 
+    # I think relying on indexing is not a good idea
+    # we can also do something like
+    # map_chr(str_split(basename(string), "_"), ~pluck(.x, 2))
+    # Unclear which one is best
     return(sapply(string, parse_bids_session))
   }
   sub("ses-", "", strsplit(string, "_")[[1]][2])
@@ -536,5 +542,42 @@ bids_naming <- function(session_folder, subject_id, session_date, filename) {
   session_date <- gsub("-", "", session_date)
   file.path(session_folder, paste0("sub-", subject_id, "_ses-", session_date, "_", filename))
 }
+
+
+
+# Read configurations -----------------------------------------------------
+
+read_config <- function(path){
+  config <- yaml::read_yaml(path)
+  return(config)
+}
+
+
+
+# Read & Handle participants.tsv ------------------------------------------
+
+
+read_participants_tsv <- function(path){
+  participants_cols <- list("id" =  col_character(),
+                            "vector" = col_character(),
+                            "connection_dt" = col_datetime(),
+                            "baseline_start" = col_datetime(),
+                            "baseline_rec_start" = col_datetime(),
+                            "baseline_stop" = col_datetime(),
+                            "opto_start" = col_datetime(),
+                            "opto_stop" = col_datetime(),
+                            "fasting_start" = col_datetime(),
+                            "fasting_rec_start" = col_datetime(),
+                            "fasting_stop" = col_datetime())
+  
+  participants <- read_tsv(path,
+                           col_types = participants_cols)
+  return(participants)
+}
+
+filter_participants <- function(participants_tsv, animal_id){
+  participants <- filter(participants, id == animal_id)
+  return(participants)
+} 
 
 
