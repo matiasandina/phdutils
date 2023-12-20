@@ -564,7 +564,7 @@ read_participants_tsv <- function(path){
                             "baseline_start" = col_datetime(),
                             "baseline_rec_start" = col_datetime(),
                             "baseline_stop" = col_datetime(),
-                            "opto_start" = col_datetime(),
+                            "opto_rec_start" = col_datetime(),
                             "opto_stop" = col_datetime(),
                             "fasting_start" = col_datetime(),
                             "fasting_rec_start" = col_datetime(),
