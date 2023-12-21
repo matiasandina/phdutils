@@ -65,18 +65,18 @@ read_sleep_from_mat <- function(filepath, params, scoring_period = 2, convert_ac
   max_t <- pluck(params, 'photo_max_t', 'value')
   sleep_behavior <- tibble(
     sleep = import_mat_labels(filepath, convert=convert_accusleep),
-    behavior = ifelse(sleep == "Wake", sleep, "Sleep")) %>% 
+    behavior = ifelse(sleep == "Wake", sleep, "Sleep")) %>%
     mutate(time_sec = make_time_column(sf = 1/scoring_period,
-                                       length.out=n()), 
-           aligned_time_sec = time_sec - eeg_t0_sec)  %>% 
+                                       length.out=n()),
+           aligned_time_sec = time_sec - eeg_t0_sec)  %>%
     filter(data.table::between(aligned_time_sec, 0, max_t))
-  
+
   # Microarousals
-  sleep_behavior <- sleep_behavior %>% 
-    mutate(run_id = vctrs::vec_identify_runs(sleep)) %>% 
-    mutate(.by="run_id", 
-           duration = last(aligned_time_sec) - first(aligned_time_sec) + scoring_period, 
-           sleep2 = if_else(sleep == "Wake" & duration < 16, "MA", sleep)) 
+  sleep_behavior <- sleep_behavior %>%
+    mutate(run_id = vctrs::vec_identify_runs(sleep)) %>%
+    mutate(.by="run_id",
+           duration = last(aligned_time_sec) - first(aligned_time_sec) + scoring_period,
+           sleep2 = if_else(sleep == "Wake" & duration < 16, "MA", sleep))
   return(sleep_behavior)
 }
 
@@ -84,28 +84,28 @@ read_sleep_from_mat <- function(filepath, params, scoring_period = 2, convert_ac
 read_sleep_consensus <- function(filepath, params, scoring_period = 2){
   eeg_t0_sec <- pluck(params, 'eeg_t0_sec', 'value')
   max_t <- pluck(params, 'photo_max_t', 'value')
-  sleep_behavior <- readr::read_csv(filepath, show_col_types = FALSE) %>% 
-    mutate_all(.funs = convert_yasa_strings) %>% 
+  sleep_behavior <- readr::read_csv(filepath, show_col_types = FALSE) %>%
+    mutate_all(.funs = convert_yasa_strings) %>%
     mutate(time_sec = make_time_column(sf = 1/scoring_period,
-                                       length.out=n()), 
-           aligned_time_sec = time_sec - eeg_t0_sec)  %>% 
-    filter(data.table::between(aligned_time_sec, 0, max_t)) %>% 
+                                       length.out=n()),
+           aligned_time_sec = time_sec - eeg_t0_sec)  %>%
+    filter(data.table::between(aligned_time_sec, 0, max_t)) %>%
     # rename to get an extra column
     # we can repurpose if we wanted to switch to mfv1
     mutate(sleep = consensus)
-  
+
   # Microarousals
-  sleep_behavior <- sleep_behavior %>% 
-    mutate(run_id = vctrs::vec_identify_runs(sleep)) %>% 
-    mutate(.by="run_id", 
-           duration = last(aligned_time_sec) - first(aligned_time_sec) + scoring_period, 
-           sleep2 = if_else(sleep == "Wake" & duration < 16, "MA", sleep)) 
+  sleep_behavior <- sleep_behavior %>%
+    mutate(run_id = vctrs::vec_identify_runs(sleep)) %>%
+    mutate(.by="run_id",
+           duration = last(aligned_time_sec) - first(aligned_time_sec) + scoring_period,
+           sleep2 = if_else(sleep == "Wake" & duration < 16, "MA", sleep))
   return(sleep_behavior)
 }
 
 plot_eeg_array <- function(ap, ml){
   df <- dplyr::arrange(tidyr::expand_grid(ap, ml), desc(ap))
-  df$label <- paste("channel",1:nrow(df)) 
+  df$label <- paste("channel",1:nrow(df))
   ggplot(df, aes(x=ml, y=ap)) +
     geom_hline(yintercept = 0, lty = 2) +
     geom_vline(xintercept = 0, lty = 2) +
@@ -116,10 +116,10 @@ plot_eeg_array <- function(ap, ml){
 }
 
 smooth_mode <- function(x, width=3){
-  zoo::rollapply(data = x, 
+  zoo::rollapply(data = x,
                  align = "center",
                  width = width,
-                 FUN = collapse::fmode, 
+                 FUN = collapse::fmode,
                  # partial = TRUE keeps the ends to be same length
                  partial=TRUE)
 }
@@ -137,40 +137,40 @@ plot_spectra <- function(spectra_list, names = NULL) {
   if (is.null(names)) {
     names <- paste("Spectrum", seq_along(spectra_list))
   }
-  
+
   # Combine the list of spectra into a single data frame using map_df
   spectra_df <- map_df(seq_along(spectra_list), function(i) {
     extract_spectrum_data(spectra_list[[i]], names[i])
   })
-  
-  # resolution will be sasmpling_frequency / nfft 
+
+  # resolution will be sasmpling_frequency / nfft
   # we can calculate with sf / (length(spec_result$window) / 2)
   freq_resolutions <- map_dbl(
     spectra_list,
     function(tt){tt$fs / (length(tt$window) / 2)}
   )
-  
+
   freq_resolutions <- paste(
-    "Frequency Resolution ", 
-    names, 
+    "Frequency Resolution ",
+    names,
     "=",
     signif(freq_resolutions, 3), collapse = ", ")
-  
+
   # Create the ggplot
-  p <- ggplot(spectra_df, 
+  p <- ggplot(spectra_df,
               aes(x = Frequency, y = Power, color = Spectrum)) +
     geom_line() +
     xlab("Frequency (Hz)") +
     ylab("Power (μV²/Hz)") +
     labs(caption = paste(freq_resolutions))
-  
+
   return(p)
 }
 
 
 # This is not a multi-taper spectrogram but it's OK
 spectro <- function(data, sf, nfft=1024, window=256, overlap=128, t0=0, plot_spec = T, normalize = F, return_data = F, ...){
-  
+
   # create spectrogram
   spec = signal::specgram(x = data,
                           n = nfft,
@@ -178,23 +178,23 @@ spectro <- function(data, sf, nfft=1024, window=256, overlap=128, t0=0, plot_spe
                           window = window,
                           overlap = overlap
   )
-  
+
   # discard phase info
   S = as.data.frame(abs(spec$S))
   # normalize
   if(normalize){
-    S = S/max(S)  
+    S = S/max(S)
   }
-  
+
   # name S
   names(S) <- spec$t
   # add freq
   S$f = spec$f
-  
+
   # pivot longer
-  S <- S %>% pivot_longer(-f, names_to = "time", values_to = "power") %>% 
+  S <- S %>% pivot_longer(-f, names_to = "time", values_to = "power") %>%
     mutate(time = as.numeric(time))
-  
+
   # config time axis
   if (is.numeric(t0)) {
     S <- mutate(S, time = time + t0)
@@ -203,34 +203,34 @@ spectro <- function(data, sf, nfft=1024, window=256, overlap=128, t0=0, plot_spe
   } else{
     stop("t0 must be either `numeric` or `POSIXct`")
   }
-  
-  out_plot <- 
-    ggplot(S, aes(time, f, fill = power)) + 
+
+  out_plot <-
+    ggplot(S, aes(time, f, fill = power)) +
     geom_tile(...) +
     scale_fill_viridis_c(...) +
-    labs(y = "Freq (Hz)") 
+    labs(y = "Freq (Hz)")
   return(out_plot)
 }
 
 # Function to compute Welch power spectrum
-welch_spectrum <- function(data, 
-                           sampling_frequency, 
-                           window_length = NULL, 
-                           overlap = 0.5, 
+welch_spectrum <- function(data,
+                           sampling_frequency,
+                           window_length = NULL,
+                           overlap = 0.5,
                            detrend = "long-mean") {
   if (is.null(window_length)) {
     window_length <- pracma::nextpow2(sqrt(length(data)))  # Default window length
   }
-  
+
   # Compute Welch power spectrum
-  spec <- gsignal::pwelch(data, 
-                          window = window_length, 
-                          overlap = overlap, 
-                          nfft = window_length, 
-                          fs = sampling_frequency, 
-                          detrend = detrend, 
+  spec <- gsignal::pwelch(data,
+                          window = window_length,
+                          overlap = overlap,
+                          nfft = window_length,
+                          fs = sampling_frequency,
+                          detrend = detrend,
                           range = "half")
-  
+
   return(spec)
 }
 
@@ -243,9 +243,9 @@ power_in_bands <- function(spec, bands, normalize=TRUE) {
   # Extract full spectrum data
   spec_data <- extract_spectrum_data(spec)
   total_power <- pracma::trapz(spec_data$Frequency, spec_data$Power)
-  
+
   # Calculate power in each band
-  
+
   band_powers <- map(names(bands),
                      function(band_name){
                        band_range <- bands[[band_name]]
@@ -259,15 +259,15 @@ power_in_bands <- function(spec, bands, normalize=TRUE) {
                        # Calculate power using the trapezoidal rule
                        power <- pracma::trapz(band_data$Frequency, band_data$Power)
                        return(
-                         data.frame(Band = band_name, 
+                         data.frame(Band = band_name,
                                     Power = power))
-                     }) %>% 
+                     }) %>%
     bind_rows()
-  
+
   if(isTRUE(normalize)){
     band_powers$Power <- band_powers$Power / total_power
   }
-  
+
   return(band_powers)
 }
 
@@ -279,12 +279,12 @@ compute_hilbert <- function(electrode, sampling_frequency) {
     "theta" = c(4, 8),
     "sigma" = c(8, 15)
   )
-  
+
   envelopes <- list()
   for (band in names(bands)) {
     low <- bands[[band]][1]
     high <- bands[[band]][2]
-    
+
     # Apply bandpass filter
     wpass <- c(low, high) / (sampling_frequency / 2)
     sos <- gsignal::butter(10, wpass, type='pass', output='Sos')
@@ -293,11 +293,11 @@ compute_hilbert <- function(electrode, sampling_frequency) {
     # Apply Hilbert transform to get the envelope (i.e., the amplitude) of the signal
     analytic_signal <- gsignal::hilbert(filtered)
     amplitude_envelope <- Mod(analytic_signal)
-    
+
     # Store the envelope in the DataFrame
     envelopes[[band]] <- amplitude_envelope
   }
-  
+
   envelopes <- dplyr::bind_cols(envelopes)
   return(envelopes)
 }
@@ -307,13 +307,13 @@ compute_hilbert <- function(electrode, sampling_frequency) {
 # Plot traces -------------------------------------------------------------
 
 plot_trace <- function(df, x, y, trange, ...){
-  p1 <- ggplot(df %>% 
+  p1 <- ggplot(df %>%
                  filter(data.table::between({{x}},
                                             trange[1],
                                             trange[2])
                  ),
-               aes(x={{x}}, y={{y}})) + 
-    geom_line(...) + 
+               aes(x={{x}}, y={{y}})) +
+    geom_line(...) +
     xlab("")
   return(p1)
 }
@@ -327,25 +327,25 @@ get_ethogram <- function(data, x, behaviour, sampling_period = NULL){
     sampling_period <- min(diff(dplyr::pull(data, {{x}})))
     cli::cli_inform("Sampling period estimated to {sampling_period} using min difference between observations")
   }
-  
+
   if(dplyr::is_grouped_df(data)){
     cli::cli_alert_info("Data was grouped by {dplyr:::group_vars(data)}")
     data <- dplyr::select(data, dplyr::group_cols(), x = {{x}}, behaviour = {{behaviour}})
   } else {
-    data <- dplyr::select(data, x = {{x}}, behaviour = {{behaviour}}) 
+    data <- dplyr::select(data, x = {{x}}, behaviour = {{behaviour}})
   }
-  
-  etho <- data %>% 
-    dplyr::mutate(run_id = vctrs::vec_identify_runs(behaviour)) %>% 
+
+  etho <- data %>%
+    dplyr::mutate(run_id = vctrs::vec_identify_runs(behaviour)) %>%
     # add to whatever previous layer was there
-    group_by(run_id, .add=TRUE) %>% 
-    dplyr::summarise(behaviour = base::unique(behaviour), 
-                     xend = dplyr::last(x) + sampling_period, 
-                     x = dplyr::first(x), 
-                     duration = xend - x, 
-                     .groups = "keep") %>% 
+    group_by(run_id, .add=TRUE) %>%
+    dplyr::summarise(behaviour = base::unique(behaviour),
+                     xend = dplyr::last(x) + sampling_period,
+                     x = dplyr::first(x),
+                     duration = xend - x,
+                     .groups = "keep") %>%
     dplyr::select(dplyr::group_cols(), x, xend, behaviour, duration)
-  
+
   return(etho)
 }
 
@@ -359,7 +359,7 @@ replace_short_behaviors <- function(data, x, behaviour, sampling_period = NULL, 
     sampling_period <- min(diff(dplyr::pull(data, {{x}})))
     cli::cli_inform(glue::glue("Sampling period estimated to {sampling_period} using min difference between observations"))
   }
-  
+
   # Helper function to get the threshold for a behavior
   get_threshold <- function(behavior_name, threshold_list) {
     if (!is.null(threshold_list[[behavior_name]])) {
@@ -368,13 +368,13 @@ replace_short_behaviors <- function(data, x, behaviour, sampling_period = NULL, 
       return(threshold_list[["global"]])
     }
   }
-  
-  data <- data %>% 
+
+  data <- data %>%
     dplyr::mutate(run_id = vctrs::vec_identify_runs({{behaviour}}),
                   behaviour = {{behaviour}})
-  
-  etho <- data %>% 
-    dplyr::group_by(run_id) %>% 
+
+  etho <- data %>%
+    dplyr::group_by(run_id) %>%
     dplyr::summarise(
       behaviour = dplyr::first({{behaviour}}),
       xend = dplyr::last({{x}}) + sampling_period,
@@ -387,16 +387,16 @@ replace_short_behaviors <- function(data, x, behaviour, sampling_period = NULL, 
     # Identify short-duration behaviors and set to NA based on threshold
     dplyr::mutate(behaviour = dplyr::if_else(duration < threshold, NA_character_, behaviour)) %>%
     dplyr::ungroup()
-  
+
   # Replace the short-duration behaviors with NA in the original data
   data <- data %>%
     dplyr::left_join(etho %>% dplyr::select(run_id, behaviour), by = "run_id") %>%
     # Now fill NA with the previous non-NA value
     # If prev value is not available (very first obs) use posterior value
     tidyr::fill(behaviour.y, .direction = "downup") %>%
-    dplyr::rename(nacf_behaviour = behaviour.y) %>% 
+    dplyr::rename(nacf_behaviour = behaviour.y) %>%
     dplyr::select(-run_id, -behaviour.x)
-  
+
   return(data)
 }
 
@@ -405,18 +405,18 @@ replace_short_behaviors <- function(data, x, behaviour, sampling_period = NULL, 
 #'  data from another tibble. Both tibbles should have the same `time_col` (otherwise be aligned in time)
 #' @param external_data data to be filtered and merged with the nested dataset providing tranges
 #' @examples
-#' data %>% get_ethogram(...) %>% 
-#'   nest(data = -run_id) %>% 
-#'   mutate(eeg_traces = map(data, 
+#' data %>% get_ethogram(...) %>%
+#'   nest(data = -run_id) %>%
+#'   mutate(eeg_traces = map(data,
 #'                           function(.x) filter_eeg_tranges(eeg_data, .x, time_sec)))
-#' 
+#'
 filter_eeg_tranges <- function(external_data, tranges, time_col){
-  external_data %>%  
-    filter(data.table::between({{time_col}}, 
-                               lower = tranges$x, 
+  external_data %>%
+    filter(data.table::between({{time_col}},
+                               lower = tranges$x,
                                upper = tranges$xend)) %>%
     mutate(rel_time = {{time_col}} - dplyr::first({{time_col}}))
-  
+
 }
 
 
@@ -430,21 +430,21 @@ filter_tranges <- function(data, .x, right_end = NULL){
     right_end <- min(.x$x + right_end, .x$xend + t_delta)
   }
 
-   data %>%  
-    filter(data.table::between(aligned_time_sec, 
-                               lower = max(0, .x$x - t_delta), 
+   data %>%
+    filter(data.table::between(aligned_time_sec,
+                               lower = max(0, .x$x - t_delta),
                                upper = min(max_t, right_end))) %>%
     mutate(rel_time = aligned_time_sec - dplyr::first(aligned_time_sec) - t_delta)
 
 }
 
 # This function is useful to bind a tibble nested by run_id and get the photometry and behavior traces aligned in time
-# .x is in the form of trange with x and xend for each run_id. 
+# .x is in the form of trange with x and xend for each run_id.
 # run this function inside a mutate(snips = map(tranges, ...))
 filter_between_join_behavior <- function(data, sleep_data, sleep_col, .x, right_end = NULL) {
-  
-    filter_tranges(data, right_end = right_end, .x = .x) %>% 
-    left_join(select(sleep_data, aligned_time_sec, {{sleep_col}}), 
+
+    filter_tranges(data, right_end = right_end, .x = .x) %>%
+    left_join(select(sleep_data, aligned_time_sec, {{sleep_col}}),
               # we need a rolling join here because the two time columns will not be identical (numerical precision)
               # photometry time >= behavior time is key to avoid off by-one errors
               by = join_by(closest(aligned_time_sec >= aligned_time_sec)))
@@ -454,10 +454,10 @@ filter_between_join_behavior <- function(data, sleep_data, sleep_col, .x, right_
 # This function checks a particular run by filtering
 check_run_time <- function(data, id){
   data %>%
-    ungroup() %>% 
-    filter(run_id == id) %>% 
-    unnest(tranges) %>% 
-    mutate(x = hms::as_hms(x + eeg_t0_sec)) %>% 
+    ungroup() %>%
+    filter(run_id == id) %>%
+    unnest(tranges) %>%
+    mutate(x = hms::as_hms(x + eeg_t0_sec)) %>%
     pull(x)
 }
 
@@ -497,7 +497,7 @@ parse_bids_subject <- function(string) {
 parse_bids_session <- function(string) {
   if (length(string) > 1) {
     # TODO: we might need to do some better checks here on string
-    # is it a file name? does it have the expected pattern!? 
+    # is it a file name? does it have the expected pattern!?
     # I think relying on indexing is not a good idea
     # we can also do something like
     # map_chr(str_split(basename(string), "_"), ~pluck(.x, 2))
@@ -517,7 +517,7 @@ parse_bids_session <- function(string) {
 #' @importFrom lubridate parse_date_time
 #' @export
 #' @examples
-#' parse_bids_session_datetime(c("sub-01_ses-20230806T090636_task-rest_bold.nii", 
+#' parse_bids_session_datetime(c("sub-01_ses-20230806T090636_task-rest_bold.nii",
 #'                               "sub-02_ses-20230807T090647_task-rest_bold.nii"))
 parse_bids_session_datetime <- function(strings, orders = "ymdHMS") {
   session_strings <- parse_bids_session(strings)
@@ -564,20 +564,37 @@ read_participants_tsv <- function(path){
                             "baseline_start" = col_datetime(),
                             "baseline_rec_start" = col_datetime(),
                             "baseline_stop" = col_datetime(),
-                            "opto_start" = col_datetime(),
+                            "opto_rec_start" = col_datetime(),
                             "opto_stop" = col_datetime(),
                             "fasting_start" = col_datetime(),
                             "fasting_rec_start" = col_datetime(),
                             "fasting_stop" = col_datetime())
-  
+
   participants <- read_tsv(path,
                            col_types = participants_cols)
   return(participants)
 }
 
 filter_participants <- function(participants_tsv, animal_id){
-  participants <- filter(participants, id == animal_id)
+  participants <- filter(participants_tsv, id == animal_id)
   return(participants)
-} 
+}
 
+# This function is designed to extract the events for a single participant
+# bs_dt <- extract_session_dt(selected_participants, "baseline")
+# fs_dt <- extract_session_dt(selected_participants, "fasting")
 
+extract_session_dt <- function(events, session, start="start", stop="stop") {
+  assertthat::assert_that(nrow(events) == 1, msg = "`events` is expected to contain only one row (one animal). If using multiple animals, run this inside a `map(...)`")
+  data_out <- events %>%
+    dplyr::select(
+      dplyr::matches(
+        glue::glue("{session}_{start}|{session}_{stop}"))
+    ) %>%
+    # we pivot so we can use min/max keeping the dttm
+    pivot_longer(everything())
+
+  output <- data_out %>% pull(value)
+  names(output) <- data_out$name
+  return(output)
+}
