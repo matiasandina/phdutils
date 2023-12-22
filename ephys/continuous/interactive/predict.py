@@ -12,17 +12,6 @@ from py_console import console
 from utils import *
 import argparse
 
-def parse_bids_subject(string: str):
-  return string.split("_")[0].replace("sub-", "")
-
-def parse_bids_session(string: str):
-  return string.split("_")[1].replace("ses-", "")
-
-def bids_naming(session_folder, subject_id, session_date, filename):
-  session_date = session_date.replace("-", "")
-  return(os.path.join(session_folder, f"sub-{subject_id}_ses-{session_date}_{filename}"))
-
-
 def get_max_probabilities(results):
     electrode_probabilities = {}
     for electrode, data in results.items():

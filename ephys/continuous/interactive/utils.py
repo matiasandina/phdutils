@@ -9,6 +9,17 @@ import datetime
 from rlist_files.list_files import list_files
 import subprocess
 
+def parse_bids_subject(string: str):
+  return string.split("_")[0].replace("sub-", "")
+
+def parse_bids_session(string: str):
+  return string.split("_")[1].replace("ses-", "")
+
+def bids_naming(session_folder, subject_id, session_date, filename):
+  session_date = session_date.replace("-", "")
+  return(os.path.join(session_folder, f"sub-{subject_id}_ses-{session_date}_{filename}"))
+
+
 def read_yaml(filename):
   with open(filename, "r") as ymlfile:
     cfg = yaml.safe_load(ymlfile)
