@@ -188,10 +188,6 @@ def run_and_save_predictions(animal_id, date, epoch_sec, display=False ):
   max_probabilities_df.to_csv(proba_fn, index=False)
   console.success(f"Wrote probas to {proba_fn}")
 
-def bids_naming(session_folder, subject_id, session_date, filename):
-    session_date = session_date.replace("-", "")
-    return(os.path.join(session_folder, f"sub-{subject_id}_ses-{session_date}_{filename}"))
-
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   parser.add_argument("--animal_id", required=True, help="Animal ID for constructing the base path. /path_to_storage/animal_id")
