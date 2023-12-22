@@ -91,39 +91,60 @@ def check_path_exists(base_folder, date):
   if not os.path.exists(base_folder) or not os.path.isdir(base_folder):
       console.error(f"Error: The base folder '{base_folder}' does not exist or is not a directory.")
       console.error("Make sure the path is correct and/or the NAS is mounted properly to the '/synology-nas' directory.")
-      return
+      return None, None
   session_folder = os.path.join(base_folder, date)
   eeg_folder = os.path.join(session_folder, "eeg")
   # Check if eeg folder exists
   if not os.path.exists(eeg_folder) or not os.path.isdir(eeg_folder):
       console.error(f"Error: The base folder '{eeg_folder}' does not exist or is not a directory.")
       console.error(f"Date was {date}, is this correct?, check `ls {eeg_folder}`")
-      return
+      return None, None
 
   return session_folder, eeg_folder
 
+def display_electrodes(results):
+  # this becomes really hard to read with long recordings
+  # electrodes lineplot with vertical spacing
+  # Get the list of electrode keys from the results dictionary
+  electrodes = list(results.keys())
+
+  # Determine the number of electrodes
+  num_electrodes = len(electrodes)
+
+  # Create a figure and axes for the plot
+  fig, ax = plt.subplots()
+
+  # Plot each electrode separately with vertical spacing
+  for i, electrode in enumerate(electrodes):
+      proba = results[electrode]['proba'].max(axis=1)
+      ax.plot(proba + i, label=electrode)
+      # Calculate mean and standard deviation
+      mean_proba = proba.mean()
+      std_proba = proba.std()
+      # Add mean + SD as text next to the trace
+      ax.text(len(proba), i + 1, f'{mean_proba:.3f} ± {std_proba:.3f}', va='center')
+
+  # Set labels and title
+  ax.set_ylabel('Electrode')
+  ax.set_title('Sleep Stage Prediction Probability Between Electrodes')
+
+  # Set y-axis ticks and labels
+  ax.set_yticks(np.arange(num_electrodes) + 1)
+  ax.set_yticklabels(electrodes)
+
+  # Set x-axis label and tick positions
+  ax.set_xlabel('Epoch')
+  ax.set_xticks(np.arange(0, len(proba), step=200))
+
+  # Adjust the x-range of the plot
+  ax.set_xlim(0, len(proba) + 250)
+
+  # Display the plot
+  plt.show(block = False)
+  return
+
 def process_eeg(eeg_file, animal_id, session_id, epoch_sec, display=False):
-    return
-
-
-# This is what has to run
-# TODO: fix the path
-def run_and_save_predictions(animal_id, date, epoch_sec, display=False ):
-  base_folder = os.path.join("/synology-nas/MLA/beelink1", animal_id)
-  # coerce date back to yyyy-mm-dd as character
-  date = str(date)
-  session_folder, eeg_folder = check_path_exists(base_folder, date)
-
-
-  console.log("Finding downsampled EEG file for prediction")
-  eeg_file = list_files(eeg_folder, pattern = "*desc-down*csv.gz", full_names = True)
-  # This might happen if data is chunked I believe
-  if len(eeg_file) > 1:
-    console.error("More than one match. Check eeg_file pattern")
-    print(eeg_file)
-    return
-  console.log(f"Working with {eeg_file[0]}")
-  eeg_df = pl.read_csv(eeg_file[0])
+  eeg_df = pl.read_csv(eeg_file)
   results = {}
   for column in eeg_df.columns:
     if column.startswith('EEG'):
@@ -138,64 +159,59 @@ def run_and_save_predictions(animal_id, date, epoch_sec, display=False ):
         results[column] = {"hypno": hypno, "proba": proba}
 
   if display:
-    # this becomes really hard to read with long recordings
-    # electrodes lineplot with vertical spacing
-    # Get the list of electrode keys from the results dictionary
-    electrodes = list(results.keys())
-
-    # Determine the number of electrodes
-    num_electrodes = len(electrodes)
-
-    # Create a figure and axes for the plot
-    fig, ax = plt.subplots()
-
-    # Plot each electrode separately with vertical spacing
-    for i, electrode in enumerate(electrodes):
-        proba = results[electrode]['proba'].max(axis=1)
-        ax.plot(proba + i, label=electrode)
-        # Calculate mean and standard deviation
-        mean_proba = proba.mean()
-        std_proba = proba.std()
-        # Add mean + SD as text next to the trace
-        ax.text(len(proba), i + 1, f'{mean_proba:.3f} ± {std_proba:.3f}', va='center')
-
-    # Set labels and title
-    ax.set_ylabel('Electrode')
-    ax.set_title('Sleep Stage Prediction Probability Between Electrodes')
-
-    # Set y-axis ticks and labels
-    ax.set_yticks(np.arange(num_electrodes) + 1)
-    ax.set_yticklabels(electrodes)
-
-    # Set x-axis label and tick positions
-    ax.set_xlabel('Epoch')
-    ax.set_xticks(np.arange(0, len(proba), step=200))
-
-    # Adjust the x-range of the plot
-    ax.set_xlim(0, len(proba) + 250)
-
-    # Display the plot
-    plt.show()
-
+    display_electrodes(results)
 
   hypno_predictions_df = aggregate_hypno_predictions(results)
   max_probabilities_df = get_max_probabilities(results)
-
+  # We will do consensus and most frequent value using all electrodes
+  # TODO: This is likely a waste of time/effort
   mfv = get_most_frequent_value(hypno_predictions_df)
   consensus = consensus_prediction(hypno_predictions_df, max_probabilities_df)
+  # agregate into an output dataframe
+  consensus_df = pd.DataFrame({'consensus': consensus, 'mfv' : mfv}).apply(yasa.hypno_int_to_str)
+  return {'hypno_predictions_df': hypno_predictions_df, 'max_probabilities_df': max_probabilities_df, 'consensus_df': consensus_df}
 
-  output_df = pd.DataFrame({'consensus': consensus, 'mfv' : mfv}).apply(yasa.hypno_int_to_str)
 
-  # Saving data 
-  output_fn = bids_naming(session_folder, animal_id, date, 'consensus_mfv_predictions.csv.gz')
-  output_df.to_csv(output_fn, index=False)
-  console.success(f"Wrote consensus predictions to {output_fn}")
-  hypno_fn = bids_naming(session_folder, animal_id, date, 'hypno_predictions.csv.gz')
-  hypno_predictions_df.to_csv(hypno_fn, index=False)
-  console.success(f"Wrote predictions to {hypno_fn}")
-  proba_fn = bids_naming(session_folder, animal_id, date, 'max_probabilities.csv.gz')
-  max_probabilities_df.to_csv(proba_fn, index=False)
-  console.success(f"Wrote probas to {proba_fn}")
+def save_predictions(data_dict, session_folder, animal_id, session_id):
+    for key, df in data_dict.items():
+        # Generate a filename for each DataFrame based on its key
+        filename = bids_naming(session_folder, animal_id, session_id, f'{key}.csv.gz')
+        df.to_csv(filename, index=False)
+        console.success(f"Wrote {key} data to {filename}")
+
+
+def run_and_save_predictions(animal_id, date, epoch_sec, display=False ):
+  base_folder = os.path.join("/synology-nas/MLA/beelink1", animal_id)
+  # coerce date back to yyyy-mm-dd as character
+  date = str(date)
+  session_folder, eeg_folder = check_path_exists(base_folder, date)
+  if session_folder is None or eeg_folder is None:
+      console.error(f"Path check under {base_folder} failed. Exiting the function.")
+      return  # Exit the function if path check fails
+
+  console.log("Finding downsampled EEG file for prediction")
+  # Find downsampled eeg files and trigger prediction for each
+  # We should have only one downsampling, but this will match all downsampling factors
+  # Not addressing that concern now
+  eeg_files = list_files(eeg_folder, pattern = "*desc-down*csv.gz", full_names = True)
+  if not eeg_files:
+    console.error("No EEG files found for processing.")
+    return
+  
+  for eeg_file in eeg_files:
+    session_id = parse_bids_session(os.path.basename(eeg_file))
+    console.log(f"session_id: {session_id}. Predicting electrodes in file {os.path.basename(eeg_file)}.")
+    output_dict = process_eeg(
+      eeg_file=eeg_file, 
+      animal_id=animal_id, 
+      session_id=session_id, 
+      epoch_sec=epoch_sec, 
+      display=display
+      )
+    # Save the data 
+    save_predictions(output_dict, session_folder, animal_id, session_id)
+
+
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
