@@ -86,13 +86,7 @@ def consensus_prediction(predictions_df, max_probabilities_df):
     consensus_predictions = weighted_votes_df.idxmax(axis=1)
     return consensus_predictions
 
-
-# This is what has to run
-# TODO: fix the path
-def run_and_save_predictions(animal_id, date, epoch_sec, display=False ):
-  base_folder = os.path.join("/synology-nas/MLA/beelink1", animal_id)
-  # coerce date back to yyyy-mm-dd as character
-  date = str(date)
+def check_path_exists(base_folder, date):
   # Check if base folder exists
   if not os.path.exists(base_folder) or not os.path.isdir(base_folder):
       console.error(f"Error: The base folder '{base_folder}' does not exist or is not a directory.")
@@ -105,6 +99,21 @@ def run_and_save_predictions(animal_id, date, epoch_sec, display=False ):
       console.error(f"Error: The base folder '{eeg_folder}' does not exist or is not a directory.")
       console.error(f"Date was {date}, is this correct?, check `ls {eeg_folder}`")
       return
+
+  return session_folder, eeg_folder
+
+def process_eeg(eeg_file, animal_id, session_id, epoch_sec, display=False):
+    return
+
+
+# This is what has to run
+# TODO: fix the path
+def run_and_save_predictions(animal_id, date, epoch_sec, display=False ):
+  base_folder = os.path.join("/synology-nas/MLA/beelink1", animal_id)
+  # coerce date back to yyyy-mm-dd as character
+  date = str(date)
+  session_folder, eeg_folder = check_path_exists(base_folder, date)
+
 
   console.log("Finding downsampled EEG file for prediction")
   eeg_file = list_files(eeg_folder, pattern = "*desc-down*csv.gz", full_names = True)
