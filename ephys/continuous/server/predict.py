@@ -143,8 +143,7 @@ def display_electrodes(results):
   plt.show(block = False)
   return
 
-def process_eeg(eeg_file, animal_id, session_id, epoch_sec, display=False):
-  eeg_df = pl.read_csv(eeg_file)
+def process_eeg(eeg_df, animal_id, session_id, epoch_sec, display=False):
   results = {}
   for column in eeg_df.columns:
     if column.startswith('EEG'):
@@ -172,15 +171,17 @@ def process_eeg(eeg_file, animal_id, session_id, epoch_sec, display=False):
   return {'hypno_predictions_df': hypno_predictions_df, 'max_probabilities_df': max_probabilities_df, 'consensus_df': consensus_df}
 
 
-def save_predictions(data_dict, session_folder, animal_id, session_id):
+def save_predictions(data_dict, saving_folder, animal_id, session_id):
     for key, df in data_dict.items():
         # Generate a filename for each DataFrame based on its key
-        filename = bids_naming(session_folder, animal_id, session_id, f'{key}.csv.gz')
+        filename = bids_naming(saving_folder, animal_id, session_id, f'{key}.csv.gz')
         df.to_csv(filename, index=False)
         console.success(f"Wrote {key} data to {filename}")
 
+def is_dataframe(df):
+  return isinstance(df, pl.dataframe.frame.DataFrame) or isinstance(df, pd.DataFrame)
 
-def run_and_save_predictions(animal_id, date, epoch_sec, display=False ):
+def run_and_save_predictions(animal_id, date, epoch_sec, eeg_data_dict = None, display=False):
   base_folder = os.path.join("/synology-nas/MLA/beelink1", animal_id)
   # coerce date back to yyyy-mm-dd as character
   date = str(date)
@@ -188,30 +189,36 @@ def run_and_save_predictions(animal_id, date, epoch_sec, display=False ):
   if session_folder is None or eeg_folder is None:
       console.error(f"Path check under {base_folder} failed. Exiting the function.")
       return  # Exit the function if path check fails
-
-  console.log("Finding downsampled EEG file for prediction")
-  # Find downsampled eeg files and trigger prediction for each
-  # We should have only one downsampling, but this will match all downsampling factors
-  # Not addressing that concern now
-  eeg_files = list_files(eeg_folder, pattern = "*desc-down*csv.gz", full_names = True)
-  if not eeg_files:
-    console.error("No EEG files found for processing.")
-    return
-  
-  for eeg_file in eeg_files:
-    session_id = parse_bids_session(os.path.basename(eeg_file))
-    console.log(f"session_id: {session_id}. Predicting electrodes in file {os.path.basename(eeg_file)}.")
-    output_dict = process_eeg(
-      eeg_file=eeg_file, 
-      animal_id=animal_id, 
-      session_id=session_id, 
-      epoch_sec=epoch_sec, 
-      display=display
-      )
-    # Save the data 
-    save_predictions(output_dict, session_folder, animal_id, session_id)
-
-
+  # let's save predictions under session_folder/sleep
+  saving_folder = os.path.join(session_folder, "sleep")
+  if not os.path.exists(saving_folder):
+    console.info(f"Creating directory {saving_folder} to save sleep predictions")
+    os.path.mkdir(saving_folder)
+  # Deal with eeg data or paths to eeg_files
+  if isinstance(eeg_data_dict, dict) and all(is_dataframe(df) for df in eeg_data_dict):
+    console.info("Received a dict of dataframes as input")
+    for eeg_file, df in eeg_data_dict.items():
+      session_id = parse_bids_session(os.path.basename(eeg_file))
+      console.log(f"session_id: {session_id}. Predicting electrodes in file {os.path.basename(eeg_file)}.")
+      output_dict = process_eeg(df, animal_id, session_id, epoch_sec, display)
+      save_predictions(output_dict, session_folder, animal_id, session_id)
+  else: 
+    # Find downsampled eeg files and trigger prediction for each
+    # We should have only one downsampling, but this will match all downsampling factors
+    # Not addressing that concern now
+    console.log("Finding downsampled EEG file(s) for prediction")
+    eeg_files = list_files(eeg_folder, pattern = "*desc-down*csv.gz", full_names = True)
+    if not eeg_files:
+      console.error("No EEG files found for processing.")
+      return
+    # Trigger prediction
+    for eeg_file in eeg_files:
+      session_id = parse_bids_session(os.path.basename(eeg_file))
+      eeg_df = pl.read_csv(eeg_file)
+      console.log(f"session_id: {session_id}. Predicting electrodes in file {os.path.basename(eeg_file)}.")
+      output_dict = process_eeg(eeg_df, animal_id, session_id, epoch_sec, display)
+      # Save the data 
+      save_predictions(output_dict, session_folder, animal_id, session_id)
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
