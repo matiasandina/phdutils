@@ -369,12 +369,15 @@ replace_short_behaviors <- function(data, x, behaviour, sampling_period = NULL, 
     }
   }
 
+  # get grouping variables
+  groups <- dplyr::group_vars(data)
+
   data <- data %>%
     dplyr::mutate(run_id = vctrs::vec_identify_runs({{behaviour}}),
                   behaviour = {{behaviour}})
 
   etho <- data %>%
-    dplyr::group_by(run_id) %>%
+    dplyr::group_by(dplyr::across(dplyr::all_of(groups)), run_id) %>%
     dplyr::summarise(
       behaviour = dplyr::first({{behaviour}}),
       xend = dplyr::last({{x}}) + sampling_period,
@@ -390,7 +393,8 @@ replace_short_behaviors <- function(data, x, behaviour, sampling_period = NULL, 
 
   # Replace the short-duration behaviors with NA in the original data
   data <- data %>%
-    dplyr::left_join(etho %>% dplyr::select(run_id, behaviour), by = "run_id") %>%
+    dplyr::left_join(etho %>% dplyr::select(dplyr::all_of(groups), run_id, behaviour),
+                     by = c(groups, "run_id")) %>%
     # Now fill NA with the previous non-NA value
     # If prev value is not available (very first obs) use posterior value
     tidyr::fill(behaviour.y, .direction = "downup") %>%
@@ -601,3 +605,37 @@ extract_session_dt <- function(events, session, start="start", stop="stop") {
   names(output) <- data_out$name
   return(output)
 }
+
+
+# Binning Data ------------------------------------------------------------
+# Helper to bin the data
+bin_hypno_data <- function(df, bin, electrode_name) {
+  # electrode_name is standard evaluation as a character!
+  bin_components <- fed3:::parse_bin(bin)
+  n <- bin_components$n
+  precision <- bin_components$precision
+  groups <- dplyr::group_vars(df)
+  # Create the binned data frame
+  binned_df <- df %>%
+    mutate(time_bins = clock::date_group(datetime,
+                                         precision = precision,
+                                         n = n),
+           across(contains(electrode_name),
+                  function(x) factor(x, levels = c("NREM", "REM", "Wake")))) %>%
+    group_by(dplyr::across(dplyr::all_of(groups)), time_bins) %>%
+    count(!!!syms(electrode_name), .drop = FALSE) %>%
+    mutate(frac = n / sum(n))
+
+  return(binned_df)
+}
+
+# Custom labeller function
+custom_labeller <- function(variables, values) {
+  if (variables == "bin") {
+    return(paste(variables, values, sep = ": "))
+  } else {
+    return(values)
+  }
+}
+
+
