@@ -478,6 +478,7 @@ check_run_time <- function(data, id){
 #' parse_bids_subject("sub-01_ses-02_task-rest_bold.nii")
 #' parse_bids_subject(c("sub-01_ses-02_task-rest_bold.nii", "sub-02_ses-03_task-rest_bold.nii"))
 parse_bids_subject <- function(string) {
+  string <- basename(string)
   if (length(string) > 1) {
     return(sapply(string, parse_bids_subject))
   }
@@ -495,6 +496,7 @@ parse_bids_subject <- function(string) {
 #' parse_bids_session("sub-01_ses-02_task-rest_bold.nii")
 #' parse_bids_session(c("sub-01_ses-02_task-rest_bold.nii", "sub-02_ses-03_task-rest_bold.nii"))
 parse_bids_session <- function(string) {
+  string <- basename(string)
   if (length(string) > 1) {
     # TODO: we might need to do some better checks here on string
     # is it a file name? does it have the expected pattern!?
@@ -519,8 +521,9 @@ parse_bids_session <- function(string) {
 #' @examples
 #' parse_bids_session_datetime(c("sub-01_ses-20230806T090636_task-rest_bold.nii",
 #'                               "sub-02_ses-20230807T090647_task-rest_bold.nii"))
-parse_bids_session_datetime <- function(strings, orders = "ymdHMS") {
-  session_strings <- parse_bids_session(strings)
+parse_bids_session_datetime <- function(string, orders = "ymdHMS") {
+  string <- basename(string)
+  session_strings <- parse_bids_session(string)
   parsed_dates <- lapply(session_strings, lubridate::parse_date_time, orders = orders)
   parsed_dates <- do.call(c, parsed_dates)
   return(parsed_dates)
