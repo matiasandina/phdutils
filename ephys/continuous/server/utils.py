@@ -58,21 +58,32 @@ def chunk_file_list(file_list, expected_delta_min, discontinuity_tolerance):
         list: List of chunks, where each chunk contains continuous files based on timestamps.
 
     """
+    if not file_list:
+      return []
     # Extract timestamps from file names
     timestamps = [re.search(r'\d{8}T\d{6}', file).group() for file in file_list]
     # Convert timestamps to datetime objects
     times = [datetime.datetime.strptime(timestamp, '%Y%m%dT%H%M%S') for timestamp in timestamps]
     # Convert datetime objects to numeric timestamps
     timestamps_numeric = [time.timestamp() for time in times]
-    # Calculate the discontinuity tolerance in minutes
-    discontinuity_tolerance_minutes = expected_delta_min + discontinuity_tolerance
     # Calculate time differences between consecutive timestamps
     time_diffs = np.diff(timestamps_numeric) / 60
-    # Find indices where time differences exceed the discontinuity tolerance
-    discontinuous_indices = np.where(time_diffs > discontinuity_tolerance_minutes)[0]
+    # Identify discontinuities based on the expected delta and tolerance
+    discontinuity_tolerance_lower = expected_delta_min - discontinuity_tolerance
+    discontinuity_tolerance_upper = expected_delta_min + discontinuity_tolerance
+    # Find indices where time differences are outside the tolerance range
+    discontinuous_indices = np.where(
+        (time_diffs < discontinuity_tolerance_lower) | 
+        (time_diffs > discontinuity_tolerance_upper)
+    )[0]
+
+    # Adjust indices to correctly split the array
+    discontinuous_indices += 1
+
     # Split the file list into chunks based on the discontinuous indices
-    chunks = np.split(file_list, discontinuous_indices + 1)
+    chunks = [file_list[i:j] for i, j in zip([0] + list(discontinuous_indices), list(discontinuous_indices) + [len(file_list)])]
     return chunks
+
 
 def read_stack_chunks(file_chunk, num_channels, dtype=np.float32, return_nsamples = False):
   num_files = len(file_chunk)
