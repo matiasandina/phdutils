@@ -2,7 +2,8 @@ import os
 import argparse
 from datetime import datetime
 from py_console import console
-
+from bonsai_dat_to_npy_eeg import *
+from predict import *
 
 def run_pipeline(start_date=None, animal_id=None):
     base_folder = f"/synology-nas/MLA/beelink1/{animal_id}"
@@ -15,30 +16,40 @@ def run_pipeline(start_date=None, animal_id=None):
 
     # Get a sorted list of folders
     folders = sorted(entry for entry in os.listdir(base_folder) if os.path.isdir(os.path.join(base_folder, entry)))
+    # only keep the ones with date pattern
+    folders = [folder for folder in folders if is_valid_date(folder)]
 
     # Filter folders based on the start date
     if start_date:
         start_datetime = datetime.strptime(start_date, "%Y-%m-%d")
         folders = [folder for folder in folders if datetime.strptime(folder, "%Y-%m-%d") >= start_datetime]
 
+    # TODO: We assume one config per animal at base_folder....this might change soon
+    config = read_config(base_folder)
+    assert config['down_freq_hz'] is not None, "No down_freq_hz in config. Exiting function"
+    assert config["aq_freq_hz"] > config["down_freq_hz"], f"{config['aq_freq_hz']} must be greater than {config['down_freq_hz']}"
+
     # Loop over the folders
     for folder in folders:
         ephys_folder_path = os.path.join(base_folder, folder, "eeg")
         ttl_folder_path = os.path.join(base_folder, folder, "ttl")
-
+        # Handle file finding
+        console.info(f"Working on {ephys_folder_path}.")
+        console.info("Finding _eeg.bin files")
+        file_list = list_files(ephys_folder_path, pattern="_eeg.bin", full_names=True)
         # Run the Python script with the appropriate arguments
-        command = f"python3 01-bonsai_dat_to_npy_eeg.py --ephys_folder {ephys_folder_path} --config_folder {base_folder}"
-        os.system(command)
+        downsampled_eegs = filter_down_bonsai_eeg(config, file_list, output_folder= ephys_folder_path)
 
         # Optionally, you can add any post-processing steps here
-        if os.path.isdir(ttl_folder_path):
-            console.info("Found ttl folder, there's an interactive folder selection in this step!")
-            # do the alignment, this is interactive to select the specific TDT data though
-            command = f"python3 02-bonsai_ttl_alignment.py --session_folder {os.path.dirname(ttl_folder_path)} --config_folder {base_folder}"
-            os.system(command)
+        #if os.path.isdir(ttl_folder_path):
+        #    console.info("Found ttl folder, there's an interactive folder selection in this step!")
+        #    # do the alignment, this is interactive to select the specific TDT data though
+        #    command = f"python3 02-bonsai_ttl_alignment.py --session_folder {os.path.dirname(ttl_folder_path)} --config_folder {base_folder}"
+        #    os.system(command)
         # do the prediction
-        command = f"python3 predict.py --animal_id {animal_id} --date {folder} --config_folder {base_folder} --epoch_sec 2.5"
-        os.system(command)
+        
+        # TODO: this returns nothing for now
+        run_and_save_predictions(animal_id, date=folder, epoch_sec = 2.5, eeg_data_dict = downsampled_eegs, config=config, display=False)
         # Print a newline for separation between iterations
         console.log(f"Finished folder {folder}")
 

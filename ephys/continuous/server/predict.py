@@ -2,7 +2,6 @@ import yasa
 from staging import SleepStaging
 import mne
 from mne.io import RawArray
-from staging import SleepStaging
 import numpy as np
 import os
 import matplotlib.pyplot as plt
@@ -12,7 +11,7 @@ from py_console import console
 from utils import *
 import argparse
 
-def predict_electrode(eeg, emg, epoch_sec = 2):
+def predict_electrode(eeg, emg, sf, epoch_sec = 2.5):
   info =  mne.create_info(["eeg","emg"], 
                           sf, 
                           ch_types='misc', 
@@ -31,7 +30,7 @@ def predict_electrode(eeg, emg, epoch_sec = 2):
   proba = sls.predict_proba()
   return predicted_labels, proba
 
-def plot_spectrogram(eeg, hypno, epoch_sec = 2):
+def plot_spectrogram(eeg, hypno, sf, epoch_sec = 2.5):
   # upsample to data
   label_df = yasa.hypno_upsample_to_data(hypno,
   sf_hypno=1/epoch_sec, 
@@ -143,7 +142,7 @@ def display_electrodes(results):
   plt.show(block = False)
   return
 
-def process_eeg(eeg_df, animal_id, session_id, epoch_sec, display=False):
+def process_eeg(eeg_df, animal_id, session_id, sf, epoch_sec, display=False):
   results = {}
   for column in eeg_df.columns:
     if column.startswith('EEG'):
@@ -152,7 +151,7 @@ def process_eeg(eeg_df, animal_id, session_id, epoch_sec, display=False):
         emg_diff = eeg_df["EMG1"]
         #emg_diff = eeg_df['EMG2'] - eeg_df['EMG1']
         # Perform prediction and plot spectrogram for the EEG channel
-        hypno, proba = predict_electrode(eeg=eeg, emg=emg_diff, epoch_sec=epoch_sec)
+        hypno, proba = predict_electrode(eeg=eeg, emg=emg_diff, sf = sf, epoch_sec=epoch_sec)
         #plot_spectrogram(eeg, hypno)
         # Store hypno and proba in the results dictionary under the column key
         results[column] = {"hypno": hypno, "proba": proba}
@@ -181,11 +180,13 @@ def save_predictions(data_dict, saving_folder, animal_id, session_id):
 def is_dataframe(df):
   return isinstance(df, pl.dataframe.frame.DataFrame) or isinstance(df, pd.DataFrame)
 
-def run_and_save_predictions(animal_id, date, epoch_sec, eeg_data_dict = None, display=False):
+def run_and_save_predictions(animal_id, date, epoch_sec, eeg_data_dict = None, config=None, display=False):
   base_folder = os.path.join("/synology-nas/MLA/beelink1", animal_id)
   # coerce date back to yyyy-mm-dd as character
   date = str(date)
   session_folder, eeg_folder = check_path_exists(base_folder, date)
+  if config is not None:
+    sf = config['down_freq_hz']
   if session_folder is None or eeg_folder is None:
       console.error(f"Path check under {base_folder} failed. Exiting the function.")
       return  # Exit the function if path check fails
@@ -193,15 +194,15 @@ def run_and_save_predictions(animal_id, date, epoch_sec, eeg_data_dict = None, d
   saving_folder = os.path.join(session_folder, "sleep")
   if not os.path.exists(saving_folder):
     console.info(f"Creating directory {saving_folder} to save sleep predictions")
-    os.path.mkdir(saving_folder)
+    os.makedirs(saving_folder)
   # Deal with eeg data or paths to eeg_files
   if isinstance(eeg_data_dict, dict) and all(is_dataframe(df) for df in eeg_data_dict):
     console.info("Received a dict of dataframes as input")
     for eeg_file, df in eeg_data_dict.items():
       session_id = parse_bids_session(os.path.basename(eeg_file))
       console.log(f"session_id: {session_id}. Predicting electrodes in file {os.path.basename(eeg_file)}.")
-      output_dict = process_eeg(df, animal_id, session_id, epoch_sec, display)
-      save_predictions(output_dict, session_folder, animal_id, session_id)
+      output_dict = process_eeg(df, animal_id, session_id, sf, epoch_sec, display)
+      save_predictions(output_dict, saving_folder, animal_id, session_id)
   else: 
     # Find downsampled eeg files and trigger prediction for each
     # We should have only one downsampling, but this will match all downsampling factors
@@ -216,9 +217,9 @@ def run_and_save_predictions(animal_id, date, epoch_sec, eeg_data_dict = None, d
       session_id = parse_bids_session(os.path.basename(eeg_file))
       eeg_df = pl.read_csv(eeg_file)
       console.log(f"session_id: {session_id}. Predicting electrodes in file {os.path.basename(eeg_file)}.")
-      output_dict = process_eeg(eeg_df, animal_id, session_id, epoch_sec, display)
+      output_dict = process_eeg(eeg_df, animal_id, session_id, sf, epoch_sec, display)
       # Save the data 
-      save_predictions(output_dict, session_folder, animal_id, session_id)
+      save_predictions(output_dict, saving_folder, animal_id, session_id)
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
@@ -232,4 +233,4 @@ if __name__ == '__main__':
   config = read_config(args.config_folder)
   sf = config['down_freq_hz']
   console.log(f'Running `predict.py` with sf={sf} and epoch_sec={args.epoch_sec}')
-  run_and_save_predictions(args.animal_id, args.date, args.epoch_sec)  
+  run_and_save_predictions(animal_id = args.animal_id, date = args.date, epoch_sec = args.epoch_sec, config = config)  
