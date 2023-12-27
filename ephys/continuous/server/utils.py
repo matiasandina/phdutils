@@ -42,6 +42,14 @@ def read_config(ephys_folder):
     config = read_yaml(config_file)
   return config
 
+# Function to check if a string can be parsed as a date
+def is_valid_date(date_string):
+    try:
+        datetime.datetime.strptime(date_string, '%Y-%m-%d')
+        return True
+    except ValueError:
+        return False
+
 def line_count(filename):
     return int(subprocess.check_output(['wc', '-l', filename]).split()[0])
 
