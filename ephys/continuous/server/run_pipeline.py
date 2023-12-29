@@ -37,8 +37,13 @@ def run_pipeline(start_date=None, animal_id=None):
         console.info(f"Working on {ephys_folder_path}.")
         console.info("Finding _eeg.bin files")
         file_list = list_files(ephys_folder_path, pattern="_eeg.bin", full_names=True)
+
+        #TODO: ADD the creation and checking of parameter dicts
+        # THIS WOULD HELP US SKIP STEPS IF PREVIOUSLY COMPUTED
+
         # Run the Python script with the appropriate arguments
-        downsampled_eegs = filter_down_bonsai_eeg(config, file_list, output_folder= ephys_folder_path)
+        downsampled_eegs, nsamples = filter_down_bonsai_eeg(config, file_list, output_folder= ephys_folder_path)
+
 
         # Optionally, you can add any post-processing steps here
         #if os.path.isdir(ttl_folder_path):
