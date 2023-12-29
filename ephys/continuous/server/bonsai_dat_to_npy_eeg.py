@@ -16,10 +16,7 @@ import datetime
 import re
 from scipy.signal import decimate
 
-def process_eeg_chunk(chunk, config, output_folder):
-    num_channels = len(config['selected_channels'])
-    # Iterate over the files and combine data
-    combined_data = read_stack_chunks(chunk, num_channels)
+def process_eeg_chunk(combined_data, config, outfilename):
     # Center data
     console.info("Centering data")
     combined_data = combined_data - np.mean(combined_data, axis = 1, keepdims = True)
@@ -33,11 +30,6 @@ def process_eeg_chunk(chunk, config, output_folder):
     channel_map = create_channel_map(data_down, config)
     console.info(f"Provided channel map is {channel_map}")
     eeg_df = pl.DataFrame(data_down.T, schema = channel_map)
-    # use the first timestamp of the session for each chunk
-    session_id = re.search(r'\d{8}T\d{6}', chunk[0]).group()
-    outfilename = bids_naming(output_folder,  
-        subject_id=config['subject_id'], session_date=session_id,
-        filename=f"desc-down{downsample_factor}_eeg.csv.gz")
     eeg_df.write_csv(outfilename)
     console.success(f"Downsampled data written to {outfilename}")
     return eeg_df, outfilename  # Return the DataFrame and the output filename
@@ -70,17 +62,27 @@ def filter_down_bonsai_eeg(config, file_list, output_folder):
     expected_delta_sec = datetime.timedelta(hours = bonsai_timer_period.hour, minutes= bonsai_timer_period.minute, seconds = bonsai_timer_period.second).total_seconds()
     expected_delta_min = expected_delta_sec / 60
     # in minutes
-    discontinuity_tolerance = 5
+    discontinuity_tolerance = 1
     # Find potential data discontinuities using file list and expected time delta 
     chunks = chunk_file_list(file_list, expected_delta_min, discontinuity_tolerance)
-    downsampled_eegs = {}  
+    downsampled_eegs = {}
+    nsamples_dict = {}
     for chunk_idx, chunk in enumerate(chunks):
         console.log(f"Working on chunk {chunk_idx + 1}/{len(chunks)}")
+        # Iterate over the files and combine data
+        combined_data, nsamples = read_stack_chunks(chunk, num_channels, return_nsamples=True)
+        # use the first timestamp of the session for each chunk
+        session_id = re.search(r'\d{8}T\d{6}', chunk[0]).group()
+        downsample_factor = int(config["aq_freq_hz"]/config["down_freq_hz"])
+        fn = f"desc-down{downsample_factor}_eeg.csv.gz"
+        outfilename = bids_naming(output_folder,  subject_id=config['subject_id'], session_date=session_id, filename=fn)
         # actually filter and downsample each chunk
-        eeg_downsampled, outfilename = process_eeg_chunk(chunk, config, output_folder)  
+        eeg_downsampled, outfilename = process_eeg_chunk(combined_data, config, outfilename)  
         # Store the output filename as key, the data as value
         downsampled_eegs[outfilename] = eeg_downsampled
-    return downsampled_eegs # Optionally return the dictionary
+        # Store the output filename as key, the nsamples of each eeg that was combined
+        nsamples_dict[outfilename] = nsamples
+    return downsampled_eegs, nsamples_dict # Optionally return the dictionary
 
 
 if __name__ == '__main__':
