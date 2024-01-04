@@ -196,7 +196,7 @@ def run_and_save_predictions(animal_id, date, epoch_sec, eeg_data_dict = None, c
     console.info(f"Creating directory {saving_folder} to save sleep predictions")
     os.makedirs(saving_folder)
   # Deal with eeg data or paths to eeg_files
-  if isinstance(eeg_data_dict, dict) and all(is_dataframe(df) for df in eeg_data_dict):
+  if isinstance(eeg_data_dict, dict) and all(is_dataframe(df) for df in eeg_data_dict.values()):
     console.info("Received a dict of dataframes as input")
     for eeg_file, df in eeg_data_dict.items():
       session_id = parse_bids_session(os.path.basename(eeg_file))
