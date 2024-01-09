@@ -11,11 +11,37 @@ import subprocess
 import re
 import mne
 
+def get_last_modif_utc(file_path):
+    fname = pathlib.Path(file_path)
+    assert fname.exists(), f'No such file: {fname}' 
+    # get the modification time
+    # it's stored under st_mtime on the stat() return object
+    # mind datetime.timezone.utc. 
+    # We define tz output from st_mtime to avoid running into issues with locale
+    mtime = datetime.datetime.fromtimestamp(fname.stat().st_mtime, tz=datetime.timezone.utc)
+    return mtime
+
+def get_last_modif(file_path, tz=None):
+    '''
+    This is a glorified wrapper to convert the output of get_last_modif_utc() to a specific timezone
+    It's unlikely that you might be running this code on a separate tz from creation (EST)
+    and since files are timestamped in the creation zone (EST) so chaning tz here might create issues
+    with math.
+    Only use tz if you are aware of these issues
+    '''
+    if tz is None:
+        tz = pytz.timezone('America/New_York')        
+    else:
+        tz = pytz.timezone(tz)
+    utc_mtime = get_last_modif_utc(file_path)
+    return utc_mtime.astimezone(tz=tz)
+
+
 def parse_bids_subject(string: str):
-  return string.split("_")[0].replace("sub-", "")
+  return os.path.basename(string).split("_")[0].replace("sub-", "")
 
 def parse_bids_session(string: str):
-  return string.split("_")[1].replace("ses-", "")
+  return os.path.basename(string).split("_")[1].replace("ses-", "")
 
 def bids_naming(session_folder, subject_id, session_date, filename):
   session_date = session_date.replace("-", "")
@@ -28,13 +54,13 @@ def read_yaml(filename):
   return cfg
 
 # check for config available
-def read_config(ephys_folder):
-  config_file = list_files(path = ephys_folder, pattern="config.yaml", full_names=True)
+def read_config(config_folder):
+  config_file = list_files(path = config_folder, pattern="config.yaml", full_names=True)
   if not config_file:
-    console.error(f"config.yaml not found in {ephys_folder}", severe=True)
+    console.error(f"config.yaml not found in {config_folder}", severe=True)
     sys.exit()
   elif len(config_file) > 1:
-    console.error(f"{ephys_folder} contains more than on config.yaml: {config_file}", severe=True)
+    console.error(f"{config_folder} contains more than on config.yaml: {config_file}", severe=True)
     sys.exit()
     # unlist using first element, assume only one match...
   else:
