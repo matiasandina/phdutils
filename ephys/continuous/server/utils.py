@@ -10,6 +10,8 @@ from rlist_files.list_files import list_files
 import subprocess
 import re
 import mne
+import pytz
+import pathlib
 
 def get_last_modif_utc(file_path):
     fname = pathlib.Path(file_path)
@@ -45,7 +47,7 @@ def parse_bids_session(string: str):
 
 def bids_naming(session_folder, subject_id, session_date, filename):
   session_date = session_date.replace("-", "")
-  return(os.path.join(session_folder, f"sub-{subject_id}_ses-{session_date}_{filename}"))
+  return os.path.join(session_folder, f"sub-{subject_id}_ses-{session_date}_{filename}")
 
 
 def read_yaml(filename):

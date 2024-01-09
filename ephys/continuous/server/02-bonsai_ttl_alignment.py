@@ -19,6 +19,112 @@ import polars as pl
 from scipy.signal import decimate
 from bonsai_dat_to_npy_eeg import *
 
+def align_ttl_to_eeg(eeg_samples, ttl_samples):
+    '''
+    This function will check what scenario for ttls we have
+    It assumes you are passing continuous eeg_samples and ttl_samples as identified previously
+    Possible Scenarios:
+        X: we can have co-start ends before,  starts after ends before, starts after co-terminate.
+        XY: Here the scenario is that the ttl recording starts after and co-terminates in X because of continuity, and ends before or co-terminates on Y.
+        X[Full]nY: This is an extension of the XY scenario with n Full chunks where eeg_samples[n] == ttl_samples[n] because the recording is continuous.
+    '''
+
+    # Check that you provided samples
+    if len(eeg_samples) == 0 or len(ttl_samples) == 0:
+        raise ValueError("Error: No samples provided")
+    # Check that they are matching in length
+    assert len(eeg_samples) == len(ttl_samples), "Samples must be the same length"
+
+    def check_co_terminate(chunk_types):
+        # co-terminate examples:
+            # Here both chunks co-terminate
+            # eeg_samples = [3600128, 3600128]
+            # ttl_samples = [399360, 3600128]
+            # chunk_types = ['Partial', 'Full']
+            # Here first chunk co-terminates (assumption of continuity) second chunk does not
+            # eeg_samples = [3600128, 3600128]
+            # ttl_samples = [399360, 1234]
+            # chunk_types = ['Partial', 'Partial']
+        co_terminate = []
+        for idx, chunk in enumerate(chunk_types):
+            if idx == 0: 
+                if len(chunk_types) > 1:
+                    # we assume co-terminate due to continuity
+                    co_terminate.append(True)
+                else:
+                    # This case is actually not possible to be determined
+                    # we shouldn't pass len(chunk_types) > 1 ?
+                    # However, it's not possible to stop ttl_rec
+                    # at the same time that files are auto chunked by bonsai
+                    # period of 'HH:MM:SS'. 
+                    # Intuition tells me the only case this would happen is if bonsai crashes in the first chunk
+                    # returning False will only be a problem in that case
+                    co_terminate.append(False)
+            else:
+                # Here the only way a chunk can co-terminate
+                # is if we found it to have the same number of samples
+                co_terminate.append(chunk == "Full")
+        return co_terminate
+
+    def check_co_start(chunk_types):
+        # co-start examples:
+            # Here the first chunk does not co-start, second one does
+            # eeg_samples = [3600128, 3600128]
+            # ttl_samples = [399360, 3600128]
+            # chunk_types = ['Partial', 'Full']
+            # Here you have the same situation becasue assumption of continuity
+            # eeg_samples = [3600128, 3600128]
+            # ttl_samples = [399360, 1234]
+            # chunk_types = ['Partial', 'Partial']
+        co_start = []
+        for idx, chunk in enumerate(chunk_types):
+            if idx == 0:
+                # first chunk will only co-start if chunk_type is "Full"
+                co_start.append(chunk == 'Full')
+            else:
+                # We assume continuity if more than one chunk
+                co_start.append(True)
+        return co_start
+
+    # Check what type of matching we have
+    # Matching will be full if eeg and ttl 
+    # have the same number of samples for a chunk 
+    # Some examples:
+        # ['Partial', 'Full', 'Full', 'Partial']
+        # or ['Partial', 'Full', 'Full', 'Full']
+        # or ['Partial', 'Partial']
+        # or ['Partial] <- we have to handle len() == 1 case separately
+        # It's not possible to align without external information of when events happened
+    chunk_types = ['Full' if eeg == ttl else 'Partial' for eeg, ttl in zip(eeg_samples, ttl_samples)]
+    co_terminate = check_co_terminate(chunk_types)
+    co_start = check_co_start(chunk_types)
+    sample_differences = [eeg - ttl for eeg, ttl in zip(eeg_samples, ttl_samples)]
+    
+    match len(eeg_samples):
+        case 1:
+            output = {
+                "continuous_chunks": 1,
+                "samples_before_ttl": [],
+                "samples_after_ttl": [],
+            }
+        case 2:
+            output = {
+                "continuous_chunks": 2,
+                "samples_before_ttl": sample_differences[0],
+                "samples_after_ttl": sample_differences[-1],
+            }
+        case _:
+            output = {
+                "continuous_chunks": len(eeg_samples),
+                "samples_before_ttl": sample_differences[0],
+                "samples_after_ttl": sample_differences[-1]
+            }
+    
+    output["chunk_types"] = chunk_types
+    output["co_start"] = co_start
+    output["co_terminate"] = co_terminate
+    return output
+
 def find_mismatch(array1, array2):
     # Check which array is longer
     if len(array1) > len(array2):
@@ -143,7 +249,6 @@ def align_single_chunk(ttl_chunk, config, output_folder):
   tdt_recording_duration_sec = (pulse_offset[-1] - pulse_onset[0]) / 1000
   # this difference should be close to zero!
   tdt_bonsai_diff = tdt_recording_duration_sec - block.info.duration.total_seconds()
-  
   # Print some info
   console.info(f"Duration difference: block info - bonsai pulses = {tdt_bonsai_diff} seconds")
   console.info(f"Duration difference: block info - tdt sent epocs = {block.info.duration.total_seconds() - tdt_epoc_duration} seconds")
@@ -174,7 +279,12 @@ def align_single_chunk(ttl_chunk, config, output_folder):
   # we have to account for that by adding the difference in samples to the pulse_onset
   session_eeg_file = list_files(output_folder, pattern=session_id, full_names = True)[0]
   eeg_samples = nsamples_dict[session_eeg_file]
-  samples_to_add = (np.array(eeg_samples) - np.array(ttl_samples))[0] 
+  alignment_dir  = align_ttl_to_eeg(eeg_samples, ttl_samples)
+  if alignment_dir['continuous_chunks'] == 1:
+    console.warn('Cannot align chunks of length 1. No way to assume co-startt/co-termination')
+    console.error('Exiting', severe=True)
+    sys.exit(0)
+  samples_to_add = alignment_dir['samples_before_ttl']
   console.info(f"The difference between the first eeg_samples and ttl_samples is {samples_to_add} samples.")
   console.info(f"This difference should match the previous shape information. Adding {samples_to_add} to pulse_onset to match eeg_t0_sec")
   pulse_onset = pulse_onset + samples_to_add
