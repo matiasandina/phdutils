@@ -319,7 +319,7 @@ def run_alignment(ephys_folder, config_folder):
   if len(ttl_chunks) > 1:
     console.warn(" #### Found discontinuity in TTL, RECORDING WAS NOT CONTINUOUS ####  ")
 
-  output_folder = os.path.join(ephys_folder, "aligned")
+  output_folder = os.path.join(ephys_folder, "aligned", "eeg")
   if not os.path.isdir(output_folder):
     console.log(f"Creating Directory: {output_folder}")
     os.makedirs(output_folder)
@@ -336,7 +336,7 @@ def run_alignment(ephys_folder, config_folder):
     all_sessions_params[session_eeg_file] = current_params
     
   # save params dict
-  save_alignment_params(all_sessions_params, output_folder)
+  save_alignment_params(all_sessions_params, os.path.dirname(output_folder))
   return all_sessions_params
 
 if __name__ == "__main__":
