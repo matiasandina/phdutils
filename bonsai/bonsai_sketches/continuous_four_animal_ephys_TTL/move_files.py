@@ -13,9 +13,7 @@ from rlist_files import list_files
 with open("config.yaml", "r") as config_file:
     config = yaml.safe_load(config_file)
 
-# Extract the configuration values
-box1_id = config["box1"]
-box2_id = config["box2"]
+# Extract the configuration values for period, database path, and directory to watch
 period = config["period"]
 period_parts = period.split(":")
 sleep_time = int(period_parts[0]) * 3600 + int(period_parts[1]) * 60 + int(period_parts[2])
@@ -23,24 +21,29 @@ sleep_time = int(period_parts[0]) * 3600 + int(period_parts[1]) * 60 + int(perio
 database_path = config["database_path"]
 directory_to_watch = config["directory_to_watch"]
 
-# Create the base directories for each box
-box1_directory = os.path.join(database_path, box1_id)
-box2_directory = os.path.join(database_path, box2_id)
+# Dynamically extract box configuration
+# Assuming you have box1, box2, box3, box4 in your config, adjust if you have more
+num_animals 4
+box_config = {f"box{i}": config[f"box{i}"] for i in range(1, num_animals + 1)}  # Creates {'box1': id1, 'box2': id2, ...}
 
-# Function to get new directory name
+# Create the base directories for each box
+box_directories = {}  # To store directory paths for each box
+for box, box_id in box_config.items():
+    box_directory = os.path.join(database_path, box_id)
+    box_directories[box] = box_directory
+
+# Dynamically handle directory existence check and renaming if needed
+for box, directory in box_directories.items():
+    if os.path.exists(directory):
+        new_id = get_new_dir_name(box_config[box])  # get_new_dir_name needs to handle box ids dynamically
+        box_config[box] = new_id  # Update the box id in the configuration if it's renamed
+        box_directories[box] = os.path.join(database_path, new_id)  # Update the directory path
+
+# Function to get new directory name if the id already exists (e.g., you forgot to update the config.yaml)
+# It's basically a glorified way to check that you are writing in the proper place
 def get_new_dir_name(box_id):
     new_id = input(f"The directory for `{box_id}` already exists.\n>> Please enter a new id or press enter to use the old one: ")
     return new_id if new_id else box_id
-
-# Check if the directories already exist
-if os.path.exists(box1_directory):
-    box1_id = get_new_dir_name(box1_id)
-    box1_directory = os.path.join(database_path, box1_id)
-
-if os.path.exists(box2_directory):
-    box2_id = get_new_dir_name(box2_id)
-    box2_directory = os.path.join(database_path, box2_id)
-
 
 def rename_file(destination_folder, file_path, box_id, timestamp):
     """
@@ -93,7 +96,18 @@ def process_file(file_path):
     taking into account the configured period and avoiding moving files that are being written to.
     """
     file_name = os.path.basename(file_path)
-    box_id = box1_id if "box1" in file_name else box2_id
+    box_id, box_directory = None, None
+    
+    # Dynamically determine the box_id and directory based on the file name
+    for box, id in box_config.items():
+        if box in file_name:
+            box_id = id
+            box_directory = box_directories[box]
+            break
+    
+    if not box_id or not box_directory:
+        spinner.fail(f"> Failed to determine box from {file_name}. Skipping the file.")
+        return
 
     # Extract the timestamp using regular expressions
     pattern = r"\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}"
@@ -129,11 +143,10 @@ def process_file(file_path):
         return
 
     # Determine the destination folder based on the box and date
-    box_directory = box1_directory if box_id == box1_id else box2_directory
     destination_folder = os.path.join(box_directory, timestamp.strftime("%Y-%m-%d"))
 
     # Move the file to the destination folder
-    rename_file(destination_folder, file_path, box_id, timestamp)    
+    rename_file(destination_folder, file_path, box_id, timestamp)
 
 
 # If we needed an on_creation() listener we could use this
