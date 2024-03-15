@@ -24,7 +24,11 @@ directory_to_watch = config["directory_to_watch"]
 # Dynamically extract box configuration
 # Assuming you have box1, box2, box3, box4 in your config, adjust if you have more
 num_animals 4
-box_config = {f"box{i}": config[f"box{i}"] for i in range(1, num_animals + 1)}  # Creates {'box1': id1, 'box2': id2, ...}
+# Creates {'box1': id1, 'box2': id2, ...}
+# config.get() will default to False if the box key.
+# If not running all 4 boxes, you can leave them empty and if config.get() will be evaluated as False
+# and boxes will not be included 
+box_config = {f"box{i}": config.get(f"box{i}") for i in range(1, num_animals + 1) if config.get(f"box{i}", False)}  
 
 # Create the base directories for each box
 box_directories = {}  # To store directory paths for each box
