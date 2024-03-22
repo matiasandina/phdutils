@@ -1,6 +1,6 @@
 import os
 import argparse
-from datetime import datetime
+import datetime
 from py_console import console
 from bonsai_dat_to_npy_eeg import *
 from predict import *
@@ -21,8 +21,8 @@ def run_pipeline(start_date=None, animal_id=None):
 
     # Filter folders based on the start date
     if start_date:
-        start_datetime = datetime.strptime(start_date, "%Y-%m-%d")
-        folders = [folder for folder in folders if datetime.strptime(folder, "%Y-%m-%d") >= start_datetime]
+        start_datetime = datetime.datetime.strptime(start_date, "%Y-%m-%d")
+        folders = [folder for folder in folders if datetime.datetime.strptime(folder, "%Y-%m-%d") >= start_datetime]
 
     # TODO: We assume one config per animal at base_folder....this might change soon
     config = read_config(base_folder)
