@@ -342,3 +342,45 @@ def ui_find_file(title=None, initialdir=None, file_type=None):
         app.quit()
 
     return result
+
+def exclude_and_write_bin(file, sf, num_channels, output_file, exclude_start_time=0, exclude_end_time=None, dtype=np.float32):
+    """
+    Reads EEG data from a columnMajor .bin file, excludes a specified time range, and writes the modified data back to a new .bin file.
+    
+    Parameters:
+    - file: Path to the input .bin file.
+    - output_file: Path where the output .bin file will be saved.
+    - num_channels: Number of EEG channels.
+    - exclude_start_time: Start time (in seconds) to exclude.
+    - exclude_end_time: End time (in seconds) to exclude.
+    - sf: Sampling frequency (samples per second).
+    - dtype: Data type of the EEG data. Default is np.float32.
+    """
+    
+    # Read the entire dataset from file
+    eeg_array = np.fromfile(file, dtype=dtype)
+    n_samples_all_channels = eeg_array.shape[0] // num_channels
+    
+    # Convert times to sample indices
+    exclude_start = int(exclude_start_time * sf)
+    if exclude_end_time is None:
+      exclude_end = n_samples_all_channels
+    else:
+      exclude_end = int(exclude_end_time * sf)
+    
+    # Ensure exclude_end does not exceed the dataset
+    if exclude_end > n_samples_all_channels:
+        exclude_end = n_samples_all_channels
+
+    # Check that exclude_start and exclude_end are within valid bounds
+    if not 0 < exclude_start < exclude_end <= n_samples_all_channels:
+        raise ValueError("Invalid exclusion range based on the provided times and sampling frequency.")
+
+    # Perform the exclusion and concatenation
+    global_exclude_start = exclude_start * num_channels
+    global_exclude_end = exclude_end * num_channels
+    
+    modified_eeg_array = np.concatenate((eeg_array[:global_exclude_start], eeg_array[global_exclude_end:]))
+    
+    # Write the modified array to a new .bin file, ensuring ColumnMajor format if needed
+    modified_eeg_array.tofile(output_file)
