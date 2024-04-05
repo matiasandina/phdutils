@@ -23,7 +23,7 @@ directory_to_watch = config["directory_to_watch"]
 
 # Dynamically extract box configuration
 # Assuming you have box1, box2, box3, box4 in your config, adjust if you have more
-num_animals 4
+num_animals = 4
 # Creates {'box1': id1, 'box2': id2, ...}
 # config.get() will default to False if the box key.
 # If not running all 4 boxes, you can leave them empty and if config.get() will be evaluated as False
