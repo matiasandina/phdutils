@@ -1,3 +1,4 @@
+import py_compile
 import yasa
 from staging import SleepStaging
 import mne
@@ -10,6 +11,20 @@ from rlist_files import list_files
 from py_console import console
 from utils import *
 import argparse
+from sklearn.preprocessing import RobustScaler
+
+def list_session_dates(base_folder, start_date=None):
+    # helper to list session dates
+    if not os.path.exists(base_folder) or not os.path.isdir(base_folder):
+        console.error(f"Error: The base folder '{base_folder}' does not exist or is not a directory.")
+        return []
+
+    folders = sorted([entry for entry in os.listdir(base_folder) if os.path.isdir(os.path.join(base_folder, entry)) and is_valid_date(entry)])
+
+    if start_date:
+        folders = [folder for folder in folders if datetime.datetime.strptime(folder, "%Y-%m-%d").date() >= start_date]
+
+    return folders
 
 def predict_electrode(eeg, emg, sf, epoch_sec = 2.5):
   info =  mne.create_info(["eeg","emg"], 
@@ -142,7 +157,25 @@ def display_electrodes(results):
   plt.show(block = False)
   return
 
-def process_eeg(eeg_df, animal_id, session_id, sf, epoch_sec, display=False):
+def process_eeg(eeg_df, sf, epoch_sec, robust_scale=True, display=False):
+  # Scale the dataframe using robust scaler
+  # TODO: We are probably paying some performance penalty because back and forth to_numpy()
+  # The thing to do would be to use
+  # ColumnTransformer from sklearn, but also update to 1.4 so that we get output="polars"
+  if robust_scale:
+    console.info("Scaling columns using robust scaler. Check Before and After!!")
+    console.log(f"Original data is of shape {eeg_df.shape}")
+    print("=" * os.get_terminal_size().columns)
+    print(eeg_df.describe())
+    scaler = RobustScaler(with_centering=True, with_scaling=True, unit_variance = False)  
+    # schema will have datatypes inferred, we can pass a dict to make them float but don't think it's needed
+    eeg_df = pl.DataFrame(scaler.fit_transform(eeg_df.to_numpy()), schema=eeg_df.columns)
+    console.log(f"Scaled data is of shape {eeg_df.shape}")
+    print("=" * os.get_terminal_size().columns)
+    console.warn("Check Effective scaling below!")
+    print("=" * os.get_terminal_size().columns)
+    print(eeg_df.describe())
+
   results = {}
   for column in eeg_df.columns:
     if column.startswith('EEG'):
@@ -180,7 +213,7 @@ def save_predictions(data_dict, saving_folder, animal_id, session_id):
 def is_dataframe(df):
   return isinstance(df, pl.dataframe.frame.DataFrame) or isinstance(df, pd.DataFrame)
 
-def run_and_save_predictions(animal_id, date, epoch_sec, eeg_data_dict = None, config=None, display=False):
+def run_and_save_predictions(animal_id, date, epoch_sec, eeg_data_dict = None, config=None, robust_scale=True, display=False):
   base_folder = os.path.join("/synology-nas/MLA/beelink1", animal_id)
   # coerce date back to yyyy-mm-dd as character
   date = str(date)
@@ -201,7 +234,7 @@ def run_and_save_predictions(animal_id, date, epoch_sec, eeg_data_dict = None, c
     for eeg_file, df in eeg_data_dict.items():
       session_id = parse_bids_session(os.path.basename(eeg_file))
       console.log(f"session_id: {session_id}. Predicting electrodes in file {os.path.basename(eeg_file)}.")
-      output_dict = process_eeg(df, animal_id, session_id, sf, epoch_sec, display)
+      output_dict = process_eeg(df, sf, epoch_sec, display)
       save_predictions(output_dict, saving_folder, animal_id, session_id)
   else: 
     # Find downsampled eeg files and trigger prediction for each
@@ -217,20 +250,30 @@ def run_and_save_predictions(animal_id, date, epoch_sec, eeg_data_dict = None, c
       session_id = parse_bids_session(os.path.basename(eeg_file))
       eeg_df = pl.read_csv(eeg_file)
       console.log(f"session_id: {session_id}. Predicting electrodes in file {os.path.basename(eeg_file)}.")
-      output_dict = process_eeg(eeg_df, animal_id, session_id, sf, epoch_sec, display)
+      output_dict = process_eeg(eeg_df, sf, epoch_sec, robust_scale, display)
       # Save the data 
       save_predictions(output_dict, saving_folder, animal_id, session_id)
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   parser.add_argument("--animal_id", required=True, help="Animal ID for constructing the base path. /path_to_storage/animal_id")
-  parser.add_argument("--date", required=True, 
-    type=datetime.date.fromisoformat,
-    help="Date that wants to be analized yyyy-mm-dd, used to construct folder path (/path_to_storage/animal_id/date/eeg/)")
+  group = parser.add_mutually_exclusive_group(required=True)
+  group.add_argument("--date", type=datetime.date.fromisoformat, help="Specific date to be analyzed in YYYY-MM-DD format. (/path_to_storage/animal_id/date/eeg/)")
+  group.add_argument("--start_date", type=datetime.date.fromisoformat, help="Start date for processing sessions (inclusive). Format: YYYY-MM-DD. All sessions from this date onwards will be considered.")
   parser.add_argument('--config_folder', help='Path to the config folder')
   parser.add_argument("--epoch_sec", type=float, required=True, help="Epoch for sleep predictions in seconds. Ideally, it matches the classifier epoch_sec")
   args = parser.parse_args()
   config = read_config(args.config_folder)
   sf = config['down_freq_hz']
   console.log(f'Running `predict.py` with sf={sf} and epoch_sec={args.epoch_sec}')
-  run_and_save_predictions(animal_id = args.animal_id, date = args.date, epoch_sec = args.epoch_sec, config = config)  
+
+  base_folder = os.path.join("/synology-nas/MLA/beelink1", args.animal_id)
+
+  if args.date:
+      dates = [args.date]
+  else:  # args.start_date is given
+      dates = list_session_dates(base_folder, args.start_date)
+
+  for date in dates:
+      console.log(f'Processing for date: {date}')
+      run_and_save_predictions(animal_id=args.animal_id, date=date, epoch_sec=args.epoch_sec, config=config)
