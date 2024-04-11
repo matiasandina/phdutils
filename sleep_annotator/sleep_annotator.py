@@ -10,7 +10,7 @@ import polars as pl
 import os
 import numpy as np
 from datetime import timedelta
-from sklearn.preprocessing import minmax_scale
+from sklearn.preprocessing import minmax_scale, robust_scale
 from scipy.signal import hilbert, butter, filtfilt, sosfiltfilt
 from lspopt import spectrogram_lspopt
 import datetime
@@ -140,7 +140,7 @@ class LabelMappingDialog(QDialog):
         for state, combo in self.mapping.items():
             value = combo.currentText()
             if value not in self.unique_values:
-                QMessageBox.warning(self, "Warning", f"The value {value} is not found in the original data. Please confirm it's correct.")
+                QMessageBox.warning(self, "Warning", f"The value {value} might not found in the original data. Please confirm it's correct by inspecting console output.")
 
 class SignalVisualizer(QMainWindow):
     def __init__(self):
@@ -161,6 +161,8 @@ class SignalVisualizer(QMainWindow):
         self.range_label = QLabel("Time Range (s)", self)
         self.range_label.setToolTip("Set the time in seconds for the data display window")
         self.range_input = QSpinBox(self)
+        # When pressing enter, it should update plots
+        self.range_input.editingFinished.connect(self.update_plots)
         self.range_input.setMinimum(1)
         self.range_input.setMaximum(10000)
         self.range_input.setValue(10) # 10 seconds min
@@ -588,8 +590,29 @@ class SignalVisualizer(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error saving annotation data", str(e))
 
-    def normalize_data(self):
-        return self.data.select(pl.all().map(lambda x: pl.Series(minmax_scale(x))))
+    def remove_artifacts(df, column, upper_quantile=0.995, lower_quantile=0.005):
+        # Compute the upper and lower bounds for clipping
+        upper_bound = df[column].quantile(upper_quantile)
+        lower_bound = df[column].quantile(lower_quantile)
+
+        # Clip the values beyond the upper and lower bounds
+        df = df.with_column(
+            pl.when(df[column] > upper_bound)
+            .then(upper_bound)
+            .when(df[column] < lower_bound)
+            .then(lower_bound)
+            .otherwise(df[column])
+            .alias(column)
+        )
+        return df
+
+    def normalize_data(self, method="robust"):
+        assert method in ['robust', 'minmax'], f"Error: Scaling method must be either 'robust' (default) or 'minmax', received {method}"
+        if method=="robust":
+            return self.data.select(pl.all().map(lambda x: pl.Series(robust_scale(x))))
+        if method=="minmax":
+            return self.data.select(pl.all().map(lambda x: pl.Series(minmax_scale(x))))
+         
 
     def compute_hilbert(self):
         # Compute the Hilbert transform for each band for the entire dataset
@@ -766,6 +789,8 @@ class SignalVisualizer(QMainWindow):
         self.time_range = self.range_input.value()
         # Receive the loaded data and store it in self.data
         self.data = data
+        # Remove Outliers by clipping
+        #self.data = self.remove_artifacts(self.data)
         # add emg diff assumes EMG1 - EMG2 is possible given names in data
         self.add_emg_diff()
         self.data_loaded = True
@@ -822,11 +847,11 @@ class SignalVisualizer(QMainWindow):
         self.current_position = 0
         self.plot_to = self.range_input.value() * self.freq_input.value() 
         self.sample_axis = np.arange(0, self.data.shape[0], 1)
-        self.selected_electrode = self.data.select(pl.col(self.electrode_input.currentText())).to_numpy().squeeze()
+        self.selected_electrode = self.eeg_plot_data.select(pl.col(self.electrode_input.currentText())).to_numpy().squeeze()
         # demean
         self.selected_electrode = self.selected_electrode - np.mean(self.selected_electrode)
         #self.selected_electrode_y_range = self.return_clipped_range(self.selected_electrode)
-        self.selected_emg_channel = self.data.select(pl.col(self.emg_input.currentText())).to_numpy().squeeze()
+        self.selected_emg_channel = self.eeg_plot_data.select(pl.col(self.emg_input.currentText())).to_numpy().squeeze()
         # demean
         self.selected_emg_cannel = self.selected_emg_channel - np.mean(self.selected_emg_channel)
         self.log_rms_emg = self.window_rms(signal = self.selected_emg_channel, window_size = self.win_sec * self.sampling_frequency)
