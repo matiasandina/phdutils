@@ -11,7 +11,7 @@ from rlist_files import list_files
 from py_console import console
 from utils import *
 import argparse
-from sklearn.preprocessing import RobustScaler
+from sklearn.preprocessing import RobustScaler, robust_scale, minmax_scale
 
 def list_session_dates(base_folder, start_date=None):
     # helper to list session dates
@@ -157,19 +157,63 @@ def display_electrodes(results):
   plt.show(block = False)
   return
 
+def clip_quantiles_startswith(df, prefix="EEG", upper_quantile=0.999, lower_quantile=0.001):
+  # Identify columns that start with the specified prefix
+  columns_to_clip = [col for col in df.columns if col.startswith(prefix)]
+  
+  # Iterate over these columns and apply the clipping
+  for column in columns_to_clip:
+    upper_bound = df[column].quantile(upper_quantile)
+    lower_bound = df[column].quantile(lower_quantile)
+    df = df.with_columns(
+        pl.when(df[column] > upper_bound)
+        .then(upper_bound)
+        .when(df[column] < lower_bound)
+        .then(lower_bound)
+        .otherwise(df[column])
+        .alias(column)
+    )
+  return df
+
+def normalize_eegs(data, method="robust", keep_dims = True):
+    assert method in ['robust', 'minmax'], f"Error: Scaling method must be either 'robust' (default) or 'minmax', received {method}"
+    if method=="robust":
+        scaled = data.select(pl.selectors.starts_with("EEG").map_batches(lambda x: pl.Series(robust_scale(x, with_centering=True, with_scaling=True, unit_variance = False))))
+    if method=="minmax":
+        scaled = data.select(pl.selectors.starts_with("EEG").map_batches(lambda x: pl.Series(minmax_scale(x))))
+    if keep_dims:
+        return scaled.hstack(data.select(~pl.selectors.starts_with("EEG")))
+    else:
+        return scaled
+        
+def normalize_data(data, method="robust"):
+    assert method in ['robust', 'minmax'], f"Error: Scaling method must be either 'robust' (default) or 'minmax', received {method}"
+    if method=="robust":
+        scaled = data.select(pl.all().map_batches(lambda x: pl.Series(robust_scale(x, with_centering=True, with_scaling=True, unit_variance = False))))
+    if method=="minmax":
+        scaled = data.select(pl.all().map_batches(lambda x: pl.Series(minmax_scale(x))))
+    return scaled
+
 def process_eeg(eeg_df, sf, epoch_sec, robust_scale=True, display=False):
+  # Artifact detection
+  lower_quant = 0.01
+  upper_quant = 0.99
+  console.info(f"Performing artifact clipping with lower:{lower_quant} and upper:{upper_quant}")
+  eeg_df = clip_quantiles_startswith(eeg_df,  prefix="EEG", lower_quantile=lower_quant, upper_quantile=upper_quant)
+
   # Scale the dataframe using robust scaler
-  # TODO: We are probably paying some performance penalty because back and forth to_numpy()
-  # The thing to do would be to use
+  # using lambda x with pl.Series might be slower ?
   # ColumnTransformer from sklearn, but also update to 1.4 so that we get output="polars"
   if robust_scale:
     console.info("Scaling columns using robust scaler. Check Before and After!!")
     console.log(f"Original data is of shape {eeg_df.shape}")
     print("=" * os.get_terminal_size().columns)
     print(eeg_df.describe())
-    scaler = RobustScaler(with_centering=True, with_scaling=True, unit_variance = False)  
-    # schema will have datatypes inferred, we can pass a dict to make them float but don't think it's needed
-    eeg_df = pl.DataFrame(scaler.fit_transform(eeg_df.to_numpy()), schema=eeg_df.columns)
+    #only scale eegs
+    #eeg_df = normalize_eegs(eeg_df, method = "robust")
+    # if model was trained with scaled emgs
+    # issue is we clip quantiles for the eeg only, how robust the scaling? 
+    eeg_df = normalize_data(eeg_df, method = "robust")
     console.log(f"Scaled data is of shape {eeg_df.shape}")
     print("=" * os.get_terminal_size().columns)
     console.warn("Check Effective scaling below!")

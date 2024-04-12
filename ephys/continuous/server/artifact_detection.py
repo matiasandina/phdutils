@@ -452,7 +452,7 @@ def local_std_artifacts(data, sf, win_sec, threshold=3, visualize = False):
         plt.xlabel('Z-scores')
         plt.ylabel('Density')
         plt.axvline(threshold, color='r', label='Threshold')
-        plt.axvline(-threshold, color='r')
+        plt.axvline(-threshold, coloscalerr='r')
         plt.legend(frameon=False)
         plt.show(block=False)
     if sum(art_std) > 0:
@@ -513,3 +513,23 @@ for stage in include:
     # Append to global vector
     epoch_is_art[where_stage] = art
     zscores[where_stage, :] = zs
+
+
+#### Evaluation of the clipping + robust scaling vs original + robust scaling ###
+    
+def normalize_eegs(data, method="robust", keep_dims = True):
+    assert method in ['robust', 'minmax'], f"Error: Scaling method must be either 'robust' (default) or 'minmax', received {method}"
+    if method=="robust":
+        scaled = data.select(pl.selectors.starts_with("EEG").map_batches(lambda x: pl.Series(robust_scale(x, with_centering=True, with_scaling=True, unit_variance = False))))
+    if method=="minmax":
+        scaled = data.select(pl.selectors.starts_with("EEG").map_batches(lambda x: pl.Series(minmax_scale(x))))
+    if keep_dims:
+        return scaled.hstack(data.select(~pl.selectors.starts_with("EEG")))
+    else:
+        return scaled
+        
+
+scaled_clipped = normalize_eegs(clipped)
+scaled_raw = normalize_eegs(data)
+
+plot_mismatch_windows(scaled_raw, scaled_clipped, start_idx)
