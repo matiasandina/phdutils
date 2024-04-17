@@ -36,6 +36,13 @@ for box, box_id in box_config.items():
     box_directory = os.path.join(database_path, box_id)
     box_directories[box] = box_directory
 
+# Function to get new directory name if the id already exists (e.g., you forgot to update the config.yaml)
+# It's basically a glorified way to check that you are writing in the proper place
+def get_new_dir_name(box_id):
+    new_id = input(f"The directory for `{box_id}` already exists.\n>> Please enter a new id or press enter to use the old one: ")
+    return new_id if new_id else box_id
+
+
 # Dynamically handle directory existence check and renaming if needed
 for box, directory in box_directories.items():
     if os.path.exists(directory):
@@ -43,11 +50,6 @@ for box, directory in box_directories.items():
         box_config[box] = new_id  # Update the box id in the configuration if it's renamed
         box_directories[box] = os.path.join(database_path, new_id)  # Update the directory path
 
-# Function to get new directory name if the id already exists (e.g., you forgot to update the config.yaml)
-# It's basically a glorified way to check that you are writing in the proper place
-def get_new_dir_name(box_id):
-    new_id = input(f"The directory for `{box_id}` already exists.\n>> Please enter a new id or press enter to use the old one: ")
-    return new_id if new_id else box_id
 
 def rename_file(destination_folder, file_path, box_id, timestamp):
     """
