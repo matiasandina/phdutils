@@ -890,11 +890,26 @@ class SignalVisualizer(QMainWindow):
          current_time = str(timedelta(seconds=current_time_sec))
          self.time_input.setText(current_time)
 
+    def find_closest_window(self, time_in_seconds):
+        # POTENTIALLY USEFUL, NOT USED FOR NOW
+        window_size = self.sampling_frequency * self.win_sec
+        # Calculate the nearest multiple of window_size
+        closest_start = round(time_in_seconds / window_size) * window_size
+        return closest_start
+
     def time_to_seconds(self, time_str):
         try:
-            time_parts = list(map(int, time_str.split(":")))
-            return time_parts[0] * 3600 + time_parts[1] * 60 + time_parts[2]
+            # Split the string by colon and handle fractional seconds
+            time_parts = time_str.split(":")
+            hours, minutes = int(time_parts[0]), int(time_parts[1])
+            # Split seconds and fractional seconds
+            seconds_parts = time_parts[2].split(".")
+            seconds = int(seconds_parts[0])
+            fractional_seconds = float("0." + seconds_parts[1]) if len(seconds_parts) > 1 else 0.0
+            # Return total seconds as a float to preserve fractional part
+            return hours * 3600 + minutes * 60 + seconds + fractional_seconds
         except (ValueError, IndexError):
+            # Return None if the input is invalid
             return None
 
     def jump_to_time_on_plot(self, x):
@@ -916,6 +931,16 @@ class SignalVisualizer(QMainWindow):
             self.current_position = int(self.time_to_seconds(self.time_input.text()) // self.win_sec)
             if self.data_loaded:
                 self.update_plots()
+                # Pan the spectrogram
+                # Current x-axis range
+                #x_min, x_max = self.spectrogram_plot.viewRange()[0]
+                # Calculate half window shift
+                #half_window_shift = (x_max - x_min) / 2
+                # Update the x-axis range to pan by half the window size
+                #new_x_min = x_min + half_window_shift
+                #new_x_max = x_max + half_window_shift
+                # Set the new range with no padding
+                #self.spectrogram_plot.setXRange(new_x_min, new_x_max, padding=0)
         else:
             QMessageBox.warning(self, "Invalid input", "Please input a valid time in HH:MM:SS format.")
 
@@ -980,8 +1005,7 @@ class SignalVisualizer(QMainWindow):
         if self.ethogram_labels is not None:
             QMessageBox.warning(self, "CAUTION!", "Labels will not be interpolated to the new annotation window.\nChanging the annotation window can corrupt the data!")
         try:
-            win_sec_value = float(self.win_sec_input.text())#int(self.win_sec_input.text())
-            self.win_sec = win_sec_value
+            self.win_sec = float(self.win_sec_input.text())#int(self.win_sec_input.text())
             # Update time_range to be at least equal to win_sec
             if self.win_sec > self.time_range:
                 print(f"Time range was lesser than annotation window, adjusting Time Range to {self.win_sec} seconds")
@@ -1051,7 +1075,7 @@ class SignalVisualizer(QMainWindow):
         # Then plot the data
         for i, col in enumerate(self.data.columns):
             y_values = self.eeg_plot_data[col].to_numpy()[self.plot_from_buffer:self.plot_to]
-            self.eeg_plot.plotItem.plot(self.plot_x_axis, y_values + i, pen=(i, self.data.shape[1]), name = f"Channel index {i}")
+            self.eeg_plot.plotItem.plot(self.plot_x_axis, y_values + 4 * i, pen=(i, self.data.shape[1]), name = f"Channel index {i}")
 
         self.eeg_plot.plotItem.autoRange()  # Force update the plot
         self.eeg_plot.getAxis("bottom").setTicks([list(zip(self.x_tick_positions, self.x_tick_labels_str))])
