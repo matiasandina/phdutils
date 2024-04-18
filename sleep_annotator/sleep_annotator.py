@@ -932,15 +932,18 @@ class SignalVisualizer(QMainWindow):
             if self.data_loaded:
                 self.update_plots()
                 # Pan the spectrogram
-                # Current x-axis range
-                #x_min, x_max = self.spectrogram_plot.viewRange()[0]
-                # Calculate half window shift
-                #half_window_shift = (x_max - x_min) / 2
-                # Update the x-axis range to pan by half the window size
-                #new_x_min = x_min + half_window_shift
-                #new_x_max = x_max + half_window_shift
-                # Set the new range with no padding
-                #self.spectrogram_plot.setXRange(new_x_min, new_x_max, padding=0)
+                x_min, x_max = self.spectrogram_plot.viewRange()[0]
+                #print(f"pan from {x_min, x_max}")
+                current_range = x_max - x_min  # The current width of the viewing window
+                # Determine the new x_min based on the target time
+                new_x_min = time_in_seconds - current_range / 2  # Center the view on the target time
+                new_x_max = time_in_seconds + current_range / 2
+                #print(f"pan to {new_x_min, new_x_max}")
+                # Ensure the new range is set within the bounds of your data
+                new_x_min = max(new_x_min, 0)  # Assuming the data starts at 0
+                new_x_max = new_x_max  # TODO: add here the greatest possible max_x
+                self.spectrogram_plot.setXRange(new_x_min, new_x_max, padding=0)
+
         else:
             QMessageBox.warning(self, "Invalid input", "Please input a valid time in HH:MM:SS format.")
 
