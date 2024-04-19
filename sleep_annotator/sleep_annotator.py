@@ -734,7 +734,7 @@ class SignalVisualizer(QMainWindow):
 
     def map_back_to_original(self, labels):
         # Apply the original user_mapping to the labels
-        return np.vectorize(user_mapping.get)(labels)
+        return np.vectorize(self.user_mapping.get)(labels)
 
     def select_etho_label(self):
         if self.check_selections() is False:
