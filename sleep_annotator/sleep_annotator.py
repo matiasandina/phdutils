@@ -7,7 +7,6 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 import pyqtgraph as pg
 import polars as pl
-import os
 import numpy as np
 from datetime import timedelta
 from sklearn.preprocessing import minmax_scale, robust_scale
@@ -612,9 +611,9 @@ class SignalVisualizer(QMainWindow):
     def normalize_data(self, method="robust"):
         assert method in ['robust', 'minmax'], f"Error: Scaling method must be either 'robust' (default) or 'minmax', received {method}"
         if method=="robust":
-            return self.data.select(pl.all().map(lambda x: pl.Series(robust_scale(x))))
+            return self.data.select(pl.all().map_batches(lambda x: pl.Series(robust_scale(x))))
         if method=="minmax":
-            return self.data.select(pl.all().map(lambda x: pl.Series(minmax_scale(x))))
+            return self.data.select(pl.all().map_batches(lambda x: pl.Series(minmax_scale(x))))
          
 
     def compute_hilbert(self):
