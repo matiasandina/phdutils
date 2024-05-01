@@ -585,7 +585,10 @@ class SignalVisualizer(QMainWindow):
                 "time_sec": np.arange(0, len(self.ethogram_labels) * self.win_sec, self.win_sec),
                 "labels" : self.ethogram_labels,
                 "behavior" : list(map(self.state_dict.get, [str(i) for i in self.ethogram_labels]))})
-            ann_data.write_csv(filename) 
+            # TODO: Polars does not support gzip yet?!
+            # see https://github.com/pola-rs/polars/issues/13346
+            # ann_data.write_csv(filename)
+            ann_data.to_pandas().to_csv(filename, index=False) 
 
         except Exception as e:
             QMessageBox.critical(self, "Error saving annotation data", str(e))
@@ -1012,7 +1015,7 @@ class SignalVisualizer(QMainWindow):
             # Update time_range to be at least equal to win_sec
             if self.win_sec > self.time_range:
                 print(f"Time range was lesser than annotation window, adjusting Time Range to {self.win_sec} seconds")
-                self.range_input.setValue(self.win_sec)
+                self.range_input.setValue(int(self.win_sec))
 
             # If no data is loaded yet, return from the function
             if not self.data_loaded: 
