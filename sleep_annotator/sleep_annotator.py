@@ -1362,34 +1362,25 @@ class SignalVisualizer(QMainWindow):
         else:
             event.ignore()
 
+def load_style(app):
+    # Load base style
+    with open("styles/base_style.qss", "r") as file:
+        app.setStyleSheet(file.read())
+
+    # Append OS-specific style
+    if sys.platform.startswith('win'):
+        with open("styles/windows_style.qss", "r") as file:
+            app.setStyleSheet(app.styleSheet() + file.read())
+    elif sys.platform.startswith('darwin'):
+        with open("styles/mac_style.qss", "r") as file:
+            app.setStyleSheet(app.styleSheet() + file.read())
+    elif sys.platform.startswith('linux'):
+        with open("styles/linux_style.qss", "r") as file:
+            app.setStyleSheet(app.styleSheet() + file.read())
+
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    app.setStyleSheet("""
-        QWidget {
-            background-color: #333333;
-            color: #dddddd;
-            font-family: Arial;
-            font-size: 20px;
-        }
-        QMenuBar {
-            background-color: #555555;
-            color: #ffffff;
-        }
-        QMenuBar::item {
-            background-color: #555555;
-            color: #ffffff;
-        }
-        QMenuBar::item:selected { /* when selected using mouse or keyboard */
-            background: #888888;
-        }
-        QMenu {
-            background-color: #555555;
-            color: #ffffff;
-        }
-        QMenu::item:selected { /* when selected using mouse or keyboard */
-            background: #888888;
-        }
-    """)
+    load_style(app)
     signal_visualizer = SignalVisualizer()
     signal_visualizer.show()
     sys.exit(app.exec_())

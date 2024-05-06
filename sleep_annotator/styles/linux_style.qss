@@ -1,0 +1,54 @@
+/* Linux-specific styles */
+QTabBar::tab {
+    background: #333333;
+    border: 1px solid #444;
+    padding: 4px;
+    color: #ffffff;
+}
+
+QTabBar::tab:selected {
+    background: #555555;
+    border-color: #222;
+}
+
+/* Additional style to ensure visibility and contrast, commonly needed in various Linux UI themes */
+QPushButton {
+    border: 1px solid #555;
+    background-color: #444444;
+    color: #ffffff;
+    padding: 5px;
+    min-height: 30px;
+}
+
+QPushButton:hover {
+    background-color: #555555;
+}
+
+/* Styling for scroll bars to make them stand out in typically darker Linux themes */
+QScrollBar:vertical {
+    border: 1px solid #2f2f2f;
+    background: #3f3f3f;
+    width: 15px;
+    margin: 22px 0 22px 0;
+}
+
+QScrollBar::handle:vertical {
+    background: #555555;
+    min-height: 20px;
+}
+
+QScrollBar::add-line:vertical {
+    border: 1px solid #2f2f2f;
+    background: #3f3f3f;
+    height: 20px;
+    subcontrol-position: bottom;
+    subcontrol-origin: margin;
+}
+
+QScrollBar::sub-line:vertical {
+    border: 1px solid #2f2f2f;
+    background: #3f3f3f;
+    height: 20px;
+    subcontrol-position: top;
+    subcontrol-origin: margin;
+}
