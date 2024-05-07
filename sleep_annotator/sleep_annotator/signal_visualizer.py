@@ -300,6 +300,7 @@ class SignalVisualizer(QMainWindow):
 
         # Ethogram
         self.state_dict = {'1': "NREM", '2':"REM", '3':"Wake"}
+        self.state_dict_text_keys = {v: k for k, v in self.state_dict.items()}
         # Define your color palettes
         palette1 = ['#3F6F76FF', '#69B7CEFF', '#C65840FF', '#F4CE4BFF', '#62496FFF']
         palette2 = ['#F7DC05FF', '#3D98D3FF', '#EC0B88FF', '#5E35B1FF', '#F9791EFF', '#3DD378FF', '#C6C6C6FF', '#444444FF']
@@ -405,8 +406,24 @@ class SignalVisualizer(QMainWindow):
             self.load_thread.start()
             self.filename_label.setText(f"Loaded File: {os.path.basename(filename)}")  # Update the QLabel with the loaded filename
             self.filename_label.setToolTip(os.path.basename(filename)) 
-    
-    def load_ann_data(self):
+
+
+    def load_ann_data_directly(self):
+        filename, _ = QFileDialog.getOpenFileName(self, 'Open file', '', 'CSV Files (*.csv *.gz)')
+        if not filename:
+            QMessageBox.information(self, "Information", "No file selected.")
+            return
+
+        try:
+            self.ann_data = pl.read_csv(filename)
+            self.ethogram_labels = self.ann_data['labels'].to_numpy().astype(int)
+            self.verify_annotation_length()
+            if self.check_selections():
+                self.update_ethogram_plot()
+        except Exception as e:
+            QMessageBox.critical(self, "Error loading annotation data", str(e))
+
+    def load_ann_data_with_mapping(self):
         intro_text = "Select a CSV file containing annotation data. This data will be previewed on the next page."
         wizard = DataWizard(intro_text, self)
         if wizard.exec_() == QWizard.Accepted:
@@ -437,6 +454,16 @@ class SignalVisualizer(QMainWindow):
         else:
             QMessageBox.information(self, "Information", "File selection was cancelled.")
 
+
+    def load_ann_data(self):
+        # Start by asking if the data was scored by this visualizer
+        response = QMessageBox.question(self, "Load Data", "Was the data scored using this Signal Visualizer?",
+                                        QMessageBox.Yes | QMessageBox.No)
+
+        if response == QMessageBox.Yes:
+            self.load_ann_data_directly()
+        else:
+            self.load_ann_data_with_mapping() 
 
     def save_ann_data(self):
         try:
@@ -631,7 +658,7 @@ class SignalVisualizer(QMainWindow):
 
     def map_back_to_original(self, labels):
         # Apply the original user_mapping to the labels
-        return np.vectorize(self.user_mapping.get)(labels)
+        return np.vectorize(self.ann_data_mappings.get)(labels)
 
     def verify_annotation_length(self):
         expected_length = len(self.selected_electrode) // (self.sampling_frequency * self.win_sec)
@@ -651,15 +678,25 @@ class SignalVisualizer(QMainWindow):
             print("No column selected.")
             return
 
-        # Apply mappings directly if available
-        if selected_column in self.ann_data_mappings:
-            self.ethogram_labels = self.ann_data.select(pl.col(selected_column)).to_numpy().squeeze()
-            # Prepare labels for plotting
-        self.verify_annotation_length()
+        # Prepare labels for plotting: convert raw values to state names using mappings
+        try:
+            # Extract column data as numpy array of strings 
+            # if input is int, this makes it 0 -> '0'
+            raw_labels = self.ann_data[selected_column].to_numpy().astype(str)
+            # Map raw labels to state names (NREM, REM, Wake) using user-provided mappings
+            state_labels = np.vectorize(self.ann_data_mappings.get)(raw_labels, 'Unknown')  # 'Unknown' for unmapped values
+            # Prepare a reverse mapping from state names to integers for plotting
+            # the dictionary will have strings as the values ('1')
+            self.ethogram_labels = np.vectorize(self.state_dict_text_keys.get)(state_labels, 0)  # Default to 0 for unknown states
+            # actually coerce to int ('1' -> 1)
+            self.ethogram_labels = self.ethogram_labels.astype(int)
+            print(f"Processed unique labels for column {selected_column}: {np.unique(self.ethogram_labels)}")
+            self.verify_annotation_length()
+            if self.check_selections():
+                self.update_ethogram_plot()
+        except Exception as e:
+            print(f"Error processing ethogram labels: {str(e)}")
 
-        if self.check_selections():
-            self.update_ethogram_plot()
-        
     def set_data(self, data):
         self.sampling_frequency = self.freq_input.value()
         self.time_range = self.range_input.value()

@@ -196,7 +196,7 @@ class MappingSetupPage(QWizardPage):
 
         self.mappingTable = QTableWidget()
         self.mappingTable.setColumnCount(2)
-        self.mappingTable.setHorizontalHeaderLabels(['Raw Value', 'Mapped Value'])
+        self.mappingTable.setHorizontalHeaderLabels(['Raw Value', 'Map To'])
         layout.addWidget(self.mappingTable)
 
         self.infoLabel = QLabel("Add possible categorical values and map them to desired categories.")
