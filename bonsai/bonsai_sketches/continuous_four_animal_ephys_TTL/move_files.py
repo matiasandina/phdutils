@@ -9,6 +9,12 @@ from yaspin import yaspin
 from yaspin.spinners import Spinners
 from rlist_files import list_files
 
+# Function to get new directory name if the id already exists (e.g., you forgot to update the config.yaml)
+# It's basically a glorified way to check that you are writing in the proper place
+def get_new_dir_name(box_id):
+    new_id = input(f"The directory for `{box_id}` already exists.\n>> Please enter a new id or press enter to use the old one: ")
+    return new_id if new_id else box_id
+
 # Read the configuration from the YAML file
 with open("config.yaml", "r") as config_file:
     config = yaml.safe_load(config_file)
@@ -43,11 +49,7 @@ for box, directory in box_directories.items():
         box_config[box] = new_id  # Update the box id in the configuration if it's renamed
         box_directories[box] = os.path.join(database_path, new_id)  # Update the directory path
 
-# Function to get new directory name if the id already exists (e.g., you forgot to update the config.yaml)
-# It's basically a glorified way to check that you are writing in the proper place
-def get_new_dir_name(box_id):
-    new_id = input(f"The directory for `{box_id}` already exists.\n>> Please enter a new id or press enter to use the old one: ")
-    return new_id if new_id else box_id
+
 
 def rename_file(destination_folder, file_path, box_id, timestamp):
     """
@@ -109,9 +111,17 @@ def process_file(file_path):
             box_directory = box_directories[box]
             break
     
+    # Fallback for specific file types
     if not box_id or not box_directory:
-        spinner.fail(f"> Failed to determine box from {file_name}. Skipping the file.")
-        return
+        if "vid_timestamp" in file_name or "ttl_in_state" in file_name:
+            # Default to the first available box if the specific file type doesn't include a box ID
+            if box_config:
+                default_box_key = sorted(box_config.keys())[0]
+                box_id = box_config[default_box_key]
+                box_directory = box_directories[default_box_key]
+        else:
+            spinner.fail(f"> Failed to determine box from {file_name}. Skipping the file.")
+            return
 
     # Extract the timestamp using regular expressions
     pattern = r"\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}"
@@ -201,7 +211,7 @@ try:
     while True:
         for file in list_files(path = directory_to_watch, full_names = True):
             spinner.start()
-            spinner.write(f"checking {file}")
+            spinner.write(f"◯ checking {file}")
             process_file(file)
         spinner.start()
         spinner.spinner = Spinners.moon
