@@ -1,0 +1,29 @@
+QWidget {
+    background-color: #333333;
+    color: #dddddd;
+    font-family: Arial;
+    font-size: 20px;
+}
+
+QMenuBar {
+    background-color: #555555;
+    color: #ffffff;
+}
+
+QMenuBar::item {
+    background-color: #555555;
+    color: #ffffff;
+}
+
+QMenuBar::item:selected {
+    background: #888888;
+}
+
+QMenu {
+    background-color: #555555;
+    color: #ffffff;
+}
+
+QMenu::item:selected {
+    background: #888888;
+}

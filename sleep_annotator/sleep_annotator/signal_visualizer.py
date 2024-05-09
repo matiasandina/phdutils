@@ -13,133 +13,10 @@ from sklearn.preprocessing import minmax_scale, robust_scale
 from scipy.signal import hilbert, butter, filtfilt, sosfiltfilt
 from lspopt import spectrogram_lspopt
 import datetime
-
-class FileSelectionDialog(QDialog):
-    def __init__(self, filenames):
-        super().__init__()
-
-        layout = QVBoxLayout(self)
-        self.listWidget = QListWidget(self)
-        layout.addWidget(self.listWidget)
-
-        # Add the filenames to the list widget
-        for filename in filenames:
-            self.listWidget.addItem(filename)
-
-        self.selected_file = None
-
-        self.button = QPushButton('OK', self)
-        layout.addWidget(self.button)
-        self.button.clicked.connect(self.on_button_clicked)
-
-    def on_button_clicked(self):
-        self.selected_file = self.listWidget.currentItem().text()
-        self.close()
-
-    def getOpenFileName(self):
-        self.exec_()
-        return self.selected_file
-
-
-class FileDialog(QDialog):
-    def __init__(self):
-        super().__init__()
-
-        layout = QVBoxLayout(self)
-        self.tree = QTreeView(self)
-        layout.addWidget(self.tree)
-
-        self.model = QFileSystemModel()
-        self.model.setRootPath('')  # set the root path to the root of the filesystem
-        self.tree.setModel(self.model)
-
-        self.tree.clicked.connect(self.on_tree_clicked)
-
-        self.button = QPushButton('OK', self)
-        layout.addWidget(self.button)
-        self.button.clicked.connect(self.on_button_clicked)
-
-        self.selected_file = None
-
-    def on_tree_clicked(self, index):
-        self.selected_file = self.model.filePath(index)
-
-    def on_button_clicked(self):
-        self.close()
-
-    def getOpenFileName(self):
-        self.exec_()
-        return self.selected_file, None
-
-
-class LoadThread(QThread):
-    notifyProgress = pyqtSignal(str)
-    dataLoaded = pyqtSignal(object)  # New signal that emits the loaded data
-
-    def __init__(self, filename):
-        QThread.__init__(self)
-        self.filename = filename
-
-    def run(self):
-        with Halo(text='Loading data...', spinner='dots'):
-            data = pl.read_csv(self.filename)  # Local variable to hold the data
-            time.sleep(0.1)  # allow some time for spinner to spin
-        self.dataLoaded.emit(data)  # Emit the loaded data
-        self.notifyProgress.emit('Data loaded.')
-
-
-class SpectrogramPlotWidget(pg.PlotWidget):
-    doubleClicked = pyqtSignal(float)  # Define the new signal
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-    def mouseDoubleClickEvent(self, event):
-        mouse_point = self.plotItem.vb.mapSceneToView(event.pos())
-        x = mouse_point.x()  # This gives the x coordinate of the mouse click, which corresponds to the time axis
-        self.doubleClicked.emit(x)  # Emit a signal to update the position
-
-
-class LabelMappingDialog(QDialog):
-    def __init__(self, unique_values, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Label Mapping")  # Set window title
-        self.unique_values = unique_values
-        self.mapping = {}
-        layout = QVBoxLayout()
-        
-        # Add a description label
-        description_label = QLabel("Please map the sleep states to the corresponding values in your data:")
-        layout.addWidget(description_label)
-        for state, state_name in {'1': "NREM", '2': "REM", '3': "Wake"}.items():
-            hbox = QHBoxLayout()
-            label = QLabel(f"{state_name} (Key {state}):")
-            combo = QComboBox()
-            combo.setEditable(True) # this allows people to add things
-            combo.addItems(self.unique_values)
-            hbox.addWidget(label)
-            hbox.addWidget(combo)
-            layout.addLayout(hbox)
-            self.mapping[state] = combo
-        # Create button box with "OK" and "Cancel" buttons
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        button_box.accepted.connect(self.validate_mapping)  # Validate the mapping when "OK" is clicked
-        button_box.accepted.connect(self.accept)  # Close the dialog with accept result when "OK" is clicked
-        button_box.rejected.connect(self.reject)  # Close the dialog with reject result when "Cancel" is clicked
-        layout.addWidget(button_box)
-        self.setLayout(layout)
-
-    def get_mapping(self):
-        result = {}
-        for state, combo in self.mapping.items():
-            result[state] = combo.currentText()
-        return result
-
-    def validate_mapping(self):
-        for state, combo in self.mapping.items():
-            value = combo.currentText()
-            if value not in self.unique_values:
-                QMessageBox.warning(self, "Warning", f"The value {value} might not found in the original data. Please confirm it's correct by inspecting console output.")
+from plotting import SpectrogramPlotWidget
+from dialogs import DataWizard
+from dialogs import FileSelectionDialog
+from data_handling import LoadThread
 
 class SignalVisualizer(QMainWindow):
     def __init__(self):
@@ -221,6 +98,7 @@ class SignalVisualizer(QMainWindow):
         self.emg_y_range_layout.addWidget(self.emg_y_range_max)
 
         # Ethogram ComboBox
+        self.ann_data_mappings = {} # we will store mappings here
         self.ethogram_labels = None
         self.etho_label_label = QLabel("Ethogram Labels", self)
         self.etho_label_input = QComboBox(self)
@@ -422,6 +300,7 @@ class SignalVisualizer(QMainWindow):
 
         # Ethogram
         self.state_dict = {'1': "NREM", '2':"REM", '3':"Wake"}
+        self.state_dict_text_keys = {v: k for k, v in self.state_dict.items()}
         # Define your color palettes
         palette1 = ['#3F6F76FF', '#69B7CEFF', '#C65840FF', '#F4CE4BFF', '#62496FFF']
         palette2 = ['#F7DC05FF', '#3D98D3FF', '#EC0B88FF', '#5E35B1FF', '#F9791EFF', '#3DD378FF', '#C6C6C6FF', '#444444FF']
@@ -527,39 +406,64 @@ class SignalVisualizer(QMainWindow):
             self.load_thread.start()
             self.filename_label.setText(f"Loaded File: {os.path.basename(filename)}")  # Update the QLabel with the loaded filename
             self.filename_label.setToolTip(os.path.basename(filename)) 
-    
-    def load_ann_data(self):
+
+
+    def load_ann_data_directly(self):
+        filename, _ = QFileDialog.getOpenFileName(self, 'Open file', '', 'CSV Files (*.csv *.gz)')
+        if not filename:
+            QMessageBox.information(self, "Information", "No file selected.")
+            return
+
         try:
-            filename, _ = QFileDialog.getOpenFileName(self, 'Open file', '', 'CSV Files (*.csv *.gz)')
-            if not filename:  # Check if filename is empty or None
-                QMessageBox.information(self, "Information", "No file selected.")
-                return
             self.ann_data = pl.read_csv(filename)
-            
-            # populate the columns
-            ann_data_names = self.ann_data.columns
-            # This changing of the available columns will trigger select_etho_labels
-            self.etho_label_input.addItems(ann_data_names)
-            ## Check if the 'labels' column exists
-            #if "labels" not in self.ann_data.columns:
-            #    QMessageBox.critical(self, "Error loading annotation data", f"'labels' column not found in the dataset")
-            #    return
-            # Check if 'time_sec' column exists and if the difference is equal to self.win_sec
-            if "time_sec" in self.ann_data.columns:
-                time_sec = self.ann_data.select(pl.col("time_sec")).to_numpy()
-                time_diff = np.diff(time_sec)
-                if not np.allclose(time_diff, self.win_sec):
-                    result = QMessageBox.warning(self, 
-                        "Warning", 
-                        f"The difference in 'time_sec' is not consistent with selected window. Do you want to change the annotation window to {np.median(time_diff)} seconds?", 
-                        QMessageBox.Yes | QMessageBox.No)
-                    if result == QMessageBox.Yes:
-                        self.win_sec = np.median(time_diff)
-            # Trigger a replot
-            #self.update_ethogram_plot()
+            self.ethogram_labels = self.ann_data['labels'].to_numpy().astype(int)
+            self.verify_annotation_length()
+            if self.check_selections():
+                self.update_ethogram_plot()
         except Exception as e:
             QMessageBox.critical(self, "Error loading annotation data", str(e))
 
+    def load_ann_data_with_mapping(self):
+        intro_text = "Select a CSV file containing annotation data. This data will be previewed on the next page."
+        wizard = DataWizard(intro_text, self)
+        if wizard.exec_() == QWizard.Accepted:
+            self.ann_data_mappings = wizard.mappings
+            print("Mappings retrieved in visualizer")
+            print(f"{self.ann_data_mappings}")
+            filename = wizard.field('filePath')
+            if filename:
+                print(f"Trying to read selected file, this might take a while...")
+                print(f"Reading {filename}")
+                try:
+                    self.ann_data = pl.read_csv(filename)
+                    ann_data_names = self.ann_data.columns
+                    self.etho_label_input.clear()  # Clear previous items
+                    self.etho_label_input.addItems(ann_data_names)
+                    if "time_sec" in self.ann_data.columns:
+                        time_sec = self.ann_data.select(pl.col("time_sec")).to_numpy()
+                        time_diff = np.diff(time_sec)
+                        if not np.allclose(time_diff, self.win_sec):
+                            result = QMessageBox.warning(self, 
+                                "Warning", 
+                                f"The difference in 'time_sec' is not consistent with selected window. Do you want to change the annotation window to {np.median(time_diff)} seconds?", 
+                                QMessageBox.Yes | QMessageBox.No)
+                            if result == QMessageBox.Yes:
+                                self.win_sec = np.median(time_diff)
+                except Exception as e:
+                    QMessageBox.critical(self, "Error loading annotation data", str(e))
+        else:
+            QMessageBox.information(self, "Information", "File selection was cancelled.")
+
+
+    def load_ann_data(self):
+        # Start by asking if the data was scored by this visualizer
+        response = QMessageBox.question(self, "Load Data", "Was the data scored using this Signal Visualizer?",
+                                        QMessageBox.Yes | QMessageBox.No)
+
+        if response == QMessageBox.Yes:
+            self.load_ann_data_directly()
+        else:
+            self.load_ann_data_with_mapping() 
 
     def save_ann_data(self):
         try:
@@ -733,58 +637,65 @@ class SignalVisualizer(QMainWindow):
             return True
         else:
             return False
+        
+    def apply_mappings(self, data, mappings):
+        for column, map_dict in mappings.items():
+            if column in data.columns:
+                data[column] = data[column].apply(lambda x: map_dict.get(str(x), x))  # Ensure string conversion if needed
+        return data
+
+    def apply_user_mappings(self, data, column):
+        # Mapping dictionary from string labels to integers for plotting
+        label_to_int = {'Wake': 1, 'NREM': 2, 'REM': 3}
+
+        # Apply mappings to convert labels to state names, then to integers
+        if column in data.columns and column in self.ann_data_mappings:
+            # Convert string labels to state names using user-defined mappings
+            data[column] = data[column].apply(lambda x: self.ann_data_mappings[column].get(str(x), x))
+            # Convert state names to integers for plotting
+            data[column] = data[column].apply(lambda x: label_to_int.get(x, 0))  # Default to 0 if not found
+        return data
 
     def map_back_to_original(self, labels):
         # Apply the original user_mapping to the labels
-        return np.vectorize(self.user_mapping.get)(labels)
+        return np.vectorize(self.ann_data_mappings.get)(labels)
 
+    def verify_annotation_length(self):
+        expected_length = len(self.selected_electrode) // (self.sampling_frequency * self.win_sec)
+        actual_length = len(self.ethogram_labels)
+        if actual_length != expected_length:
+            QMessageBox.warning(self, "Warning",
+                                f"The length of the annotations ({actual_length}) does not match the expected length ({expected_length}) based on the existing data and block size ({self.win_sec} sec).")
+
+    
     def select_etho_label(self):
-        if self.check_selections() is False:
+        if not self.check_selections():
             print("Waiting For EEG/EMG data to be loaded")
-        else:
-            selected_column = self.etho_label_input.currentText()
-            if not selected_column:
-                print("No column selected.")
-                return    
-            unique_values_dict = {}
-            print("These are the unique labels in the data")
-            for col_name in self.ann_data.columns:
-                unique_vals = np.unique(self.ann_data.select(pl.col(col_name)).to_numpy().squeeze())
-                unique_vals_str = list(map(str, unique_vals))
-                unique_values_dict[col_name] = unique_vals_str
-                print(f"{col_name} : {unique_vals_str}")    
-            #self.ethogram_labels = self.ann_data.select(pl.col(selected_column)).to_numpy().squeeze()
-            #unique_values = list(map(str, np.unique(self.ethogram_labels)))
-            self.ethogram_labels = self.ann_data.select(pl.col(selected_column)).to_numpy().squeeze()
-            unique_values = unique_values_dict.get(selected_column, [])
+            return
 
-            # Check if the mapping is already set
-            if not hasattr(self, 'user_mapping') or not self.user_mapping:
-                mapping_dialog = LabelMappingDialog(unique_values)
-                if mapping_dialog.exec_() == QDialog.Accepted:
-                    self.user_mapping = mapping_dialog.get_mapping()
-                else:
-                    # Handle cancellation if necessary
-                    return
+        selected_column = self.etho_label_input.currentText()
+        if not selected_column:
+            print("No column selected.")
+            return
 
-            # Apply the mapping
-            reverse_mapping = {v: k for k, v in self.user_mapping.items()}
-            self.ethogram_labels = self.ethogram_labels.astype(str)
-            self.ethogram_labels = np.vectorize(reverse_mapping.get)(self.ethogram_labels)
-            # go to int for plotting
+        # Prepare labels for plotting: convert raw values to state names using mappings
+        try:
+            # Extract column data as numpy array of strings 
+            # if input is int, this makes it 0 -> '0'
+            raw_labels = self.ann_data[selected_column].to_numpy().astype(str)
+            # Map raw labels to state names (NREM, REM, Wake) using user-provided mappings
+            state_labels = np.vectorize(self.ann_data_mappings.get)(raw_labels, 'Unknown')  # 'Unknown' for unmapped values
+            # Prepare a reverse mapping from state names to integers for plotting
+            # the dictionary will have strings as the values ('1')
+            self.ethogram_labels = np.vectorize(self.state_dict_text_keys.get)(state_labels, 0)  # Default to 0 for unknown states
+            # actually coerce to int ('1' -> 1)
             self.ethogram_labels = self.ethogram_labels.astype(int)
-
-            # Block size in seconds (you may get this value from the user or elsewhere)
-            n_seconds_per_sample = self.win_sec 
-            # Calculate the expected number of annotation samples
-            expected_annotation_length = len(self.selected_electrode) // (self.sampling_frequency * n_seconds_per_sample)
-            # Check if the actual length of the annotations matches the expected length
-            if len(self.ethogram_labels) != expected_annotation_length:
-                QMessageBox.warning(self, "Warning", f"The length of the annotations ({len(self.ethogram_labels)}) does not match the expected length based on the existing data ({len(self.selected_electrode)}) and block size ({n_seconds_per_sample} sec).")
-                # Further actions, such as rejecting the annotations or providing guidance to the user
-
+            print(f"Processed unique labels for column {selected_column}: {np.unique(self.ethogram_labels)}")
+            self.verify_annotation_length()
             if self.check_selections():
                 self.update_ethogram_plot()
+        except Exception as e:
+            print(f"Error processing ethogram labels: {str(e)}")
 
     def set_data(self, data):
         self.sampling_frequency = self.freq_input.value()
@@ -1361,26 +1272,3 @@ class SignalVisualizer(QMainWindow):
             event.accept()
         else:
             event.ignore()
-
-def load_style(app):
-    # Load base style
-    with open("styles/base_style.qss", "r") as file:
-        app.setStyleSheet(file.read())
-
-    # Append OS-specific style
-    if sys.platform.startswith('win'):
-        with open("styles/windows_style.qss", "r") as file:
-            app.setStyleSheet(app.styleSheet() + file.read())
-    elif sys.platform.startswith('darwin'):
-        with open("styles/mac_style.qss", "r") as file:
-            app.setStyleSheet(app.styleSheet() + file.read())
-    elif sys.platform.startswith('linux'):
-        with open("styles/linux_style.qss", "r") as file:
-            app.setStyleSheet(app.styleSheet() + file.read())
-
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    load_style(app)
-    signal_visualizer = SignalVisualizer()
-    signal_visualizer.show()
-    sys.exit(app.exec_())

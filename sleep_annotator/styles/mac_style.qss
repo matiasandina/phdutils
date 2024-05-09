@@ -1,0 +1,11 @@
+/* macOS-specific styles */
+QTabBar::tab {
+    border: 1px solid #aaa;
+    padding: 3px;
+    color: #000;
+}
+
+QTabBar::tab:selected {
+    background: #cccccc;
+    border-color: #888;
+}
