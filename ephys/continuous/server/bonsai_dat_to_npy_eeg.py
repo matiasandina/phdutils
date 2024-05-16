@@ -30,7 +30,9 @@ def process_eeg_chunk(combined_data, config, outfilename):
     channel_map = create_channel_map(data_down, config)
     console.info(f"Provided channel map is {channel_map}")
     eeg_df = pl.DataFrame(data_down.T, schema = channel_map)
-    eeg_df.write_csv(outfilename)
+    #eeg_df.write_csv(outfilename)
+    console.warn("Using pandas due to polars #13227")
+    eeg_df.to_pandas().to_csv(outfilename, index=False)
     console.success(f"Downsampled data written to {outfilename}")
     return eeg_df, outfilename  # Return the DataFrame and the output filename
 
