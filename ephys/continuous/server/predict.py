@@ -306,12 +306,20 @@ if __name__ == '__main__':
   group.add_argument("--start_date", type=datetime.date.fromisoformat, help="Start date for processing sessions (inclusive). Format: YYYY-MM-DD. All sessions from this date onwards will be considered.")
   parser.add_argument('--config_folder', help='Path to the config folder')
   parser.add_argument("--epoch_sec", type=float, required=True, help="Epoch for sleep predictions in seconds. Ideally, it matches the classifier epoch_sec")
+  parser.add_argument("--base_folder", required=False, help="Full path of base folder (everything before `animal_id`) if not using default hard-coded one", default=None)
+
   args = parser.parse_args()
   config = read_config(args.config_folder)
   sf = config['down_freq_hz']
   console.log(f'Running `predict.py` with sf={sf} and epoch_sec={args.epoch_sec}')
 
-  base_folder = os.path.join("/synology-nas/MLA/beelink1", args.animal_id)
+  if args.base_folder is not None:
+      base_folder = args.base_folder
+      console.info(f"Using User-Provided path: {base_folder}")
+  else:
+      # go with hardcoded
+      base_folder = os.path.join("/synology-nas/MLA/beelink1", args.animal_id)
+      console.warn(f"Using Hard-Coded path: {base_folder}")
 
   if args.date:
       dates = [args.date]
