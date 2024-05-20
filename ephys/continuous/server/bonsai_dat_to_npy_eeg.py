@@ -11,6 +11,7 @@ from mne.io import RawArray
 from utils import *
 from rlist_files import list_files
 import polars as pl
+import pandas as pd
 import argparse
 import datetime
 import re
@@ -25,14 +26,17 @@ def process_eeg_chunk(combined_data, config, outfilename):
     # Downsample
     # 'fir' is super important, all else too slow and breaking
     downsample_factor = int(config["aq_freq_hz"]/config["down_freq_hz"])
+    console.info(f"Filtered data shape is {filtered_data.shape}")
     console.info(f"Downsampling with factor {downsample_factor} from {config['aq_freq_hz']} into {config['down_freq_hz']} Hz")
     data_down = decimate(filtered_data, downsample_factor, ftype='fir')
+    console.info(f"Decimated data shape is {data_down.shape}")
     channel_map = create_channel_map(data_down, config)
     console.info(f"Provided channel map is {channel_map}")
-    eeg_df = pl.DataFrame(data_down.T, schema = channel_map)
+    #eeg_df = pl.DataFrame(data_down.T, schema = channel_map)
     #eeg_df.write_csv(outfilename)
     console.warn("Using pandas due to polars #13227")
-    eeg_df.to_pandas().to_csv(outfilename, index=False)
+    eeg_df = pd.DataFrame(data_down.T, columns = channel_map)
+    eeg_df.to_csv(outfilename, index=False)
     console.success(f"Downsampled data written to {outfilename}")
     return eeg_df, outfilename  # Return the DataFrame and the output filename
 

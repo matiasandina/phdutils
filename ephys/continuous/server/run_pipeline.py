@@ -5,8 +5,7 @@ from py_console import console
 from bonsai_dat_to_npy_eeg import *
 from predict import *
 
-def run_pipeline(start_date=None, animal_id=None):
-    base_folder = f"/synology-nas/MLA/beelink1/{animal_id}"
+def run_pipeline(base_folder, start_date=None, animal_id=None):
 
     # Check if base folder exists
     if not os.path.exists(base_folder) or not os.path.isdir(base_folder):
@@ -54,7 +53,8 @@ def run_pipeline(start_date=None, animal_id=None):
         # do the prediction
         
         # TODO: this returns nothing for now
-        run_and_save_predictions(animal_id, date=folder, epoch_sec = 2.5, eeg_data_dict = downsampled_eegs, config=config, display=False)
+        console.warn("NOT RUNNING PREDICTIONS!!!")
+        #run_and_save_predictions(animal_id, date=folder, epoch_sec = 2.5, eeg_data_dict = downsampled_eegs, config=config, display=False)
         # Print a newline for separation between iterations
         console.log(f"Finished folder {folder}")
 
@@ -62,6 +62,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--start_date", help="Starting date for batch processing (format: YYYY-MM-DD)")
     parser.add_argument("--animal_id", required=True, help="Animal ID for constructing the base path")
+    parser.add_argument("--base_folder", required=False, help="Full path of base folder (everything before `animal_id`) if not using default hard-coded one", default=None)
     args = parser.parse_args()
+    if args.base_folder is not None:
+        base_folder = os.path.join(args.base_folder, args.animal_id)
+        console.info(f"Using User-Provided path: {base_folder}")
+    else:
+        # go with hardcoded
+        base_folder = os.path.join("/synology-nas/MLA/beelink1", args.animal_id)
+        console.warn(f"Using Hard-Coded path: {base_folder}")
 
-    run_pipeline(args.start_date, args.animal_id)
+    run_pipeline(base_folder, args.start_date, args.animal_id)
