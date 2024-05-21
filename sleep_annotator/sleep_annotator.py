@@ -14,17 +14,36 @@ from scipy.signal import hilbert, butter, filtfilt, sosfiltfilt, decimate
 from lspopt import spectrogram_lspopt
 import datetime
 
-class FileSelectionDialog(QDialog):
-    def __init__(self, filenames):
-        super().__init__()
+def shorten_path(path):
+    parts = path.split(os.sep)
+    # Ensure there are enough parts to process
+    if len(parts) > 4:
+        # Concatenate first two folders, ellipsis, and the last two segments
+        shortened = os.sep.join(parts[:3] + ['...'] + parts[-2:])
+    else:
+        # If not enough parts, just join them normally
+        shortened = os.sep.join(parts)
+    return shortened
 
+class FileSelectionDialog(QDialog):
+    def __init__(self, filenames, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle("Select EEG Data File")
         layout = QVBoxLayout(self)
         self.listWidget = QListWidget(self)
+        self.listWidget.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         layout.addWidget(self.listWidget)
 
-        # Add the filenames to the list widget
+        self.setMinimumSize(600, 300)  # Adjust as necessary
+
+        # Store full filenames to map back from selection
+        self.full_filenames = filenames
+
+        # Add the filenames to the list widget, using the shortened path
         for filename in filenames:
-            self.listWidget.addItem(filename)
+            shortened_filename = shorten_path(filename)
+            self.listWidget.addItem(shortened_filename)
 
         self.selected_file = None
 
@@ -33,7 +52,9 @@ class FileSelectionDialog(QDialog):
         self.button.clicked.connect(self.on_button_clicked)
 
     def on_button_clicked(self):
-        self.selected_file = self.listWidget.currentItem().text()
+        if self.listWidget.currentItem():  # Check if an item is selected
+            index = self.listWidget.currentRow()
+            self.selected_file = self.full_filenames[index]  # Retrieve full path
         self.close()
 
     def getOpenFileName(self):
@@ -73,7 +94,7 @@ class FileDialog(QDialog):
 
 
 class LoadThread(QThread):
-    notifyProgress = pyqtSignal(str)
+    notifyProgress = pyqtSignal(int)  # Changed to emit integers representing progress
     dataLoaded = pyqtSignal(object)  # New signal that emits the loaded data
 
     def __init__(self, filename):
@@ -81,12 +102,14 @@ class LoadThread(QThread):
         self.filename = filename
 
     def run(self):
-        with Halo(text='Loading data...', spinner='dots'):
-            data = pl.read_csv(self.filename)  # Local variable to hold the data
-            time.sleep(0.1)  # allow some time for spinner to spin
-        self.dataLoaded.emit(data)  # Emit the loaded data
+        # Assuming we know how to calculate progress; here's a stub
+        data = pl.read_csv(self.filename)  # This does not naturally support progress updates
+        # Simulate progress for demonstration
+        for percent_complete in range(101):  # Simulate loading
+            time.sleep(0.05)  # Simulate time delay
+            self.notifyProgress.emit(percent_complete)  # Emit progress update
+        self.dataLoaded.emit(data)  # Emit loaded data once complete
         self.notifyProgress.emit('Data loaded.')
-
 
 class SpectrogramPlotWidget(pg.PlotWidget):
     doubleClicked = pyqtSignal(float)  # Define the new signal
@@ -150,12 +173,14 @@ class SignalVisualizer(QMainWindow):
         self.layout = QVBoxLayout(self.central_widget)
 
         self.freq_label = QLabel("Sampling Frequency (Hz)", self)
-        self.freq_input = QSpinBox(self)
-        self.freq_input.setMinimum(1)
-        self.freq_input.setMaximum(10000)
-        self.freq_input.setValue(100)
+        self.freq_input = QComboBox(self)
+        # Populate the combo box with standard sampling frequencies
+        standard_frequencies = ['64', '100', '128', '512', '1000']
+        self.freq_input.addItems(standard_frequencies)
+        self.freq_input.setCurrentIndex(-1)  # Set to no selection initially
         self.freq_input.setToolTip("Set the sampling frequency for the data visualization in Hz.")
         self.freq_label.setToolTip("Set the sampling frequency for the data visualization in Hz.")
+        self.freq_input.currentIndexChanged.connect(self.update_sampling_frequency)
 
         self.range_label = QLabel("Time Range (s)", self)
         self.range_label.setToolTip("Set the time in seconds for the data display window")
@@ -450,7 +475,7 @@ class SignalVisualizer(QMainWindow):
         self.power_plots.setWidget(self.power_plots_plot)  # Set the PlotWidget as the dock widget's widget
 
         # Variables
-        self.sampling_frequency = self.freq_input.value()
+        self.sampling_frequency = None
         self.time_range = self.range_input.value()
 
 
@@ -478,7 +503,7 @@ class SignalVisualizer(QMainWindow):
 
         # Updating/listeners
         self.range_input.valueChanged.connect(self.update_position)
-        self.freq_input.valueChanged.connect(self.update_position)
+        #self.freq_input.valueChanged.connect(self.update_position)
 
         #self.setGeometry(300, 300, 1200, 600
         self.setWindowIcon(QIcon('logo.png'))
@@ -500,39 +525,92 @@ class SignalVisualizer(QMainWindow):
         self.munge_dialog.setLayout(munge_layout)
         self.munge_dialog.setModal(True)
 
+    def update_sampling_frequency(self, index):
+        if index == -1:
+            # No selection made
+            self.prompt_for_frequency_selection()
+        else:
+            # Update the sampling frequency based on selected item
+            self.sampling_frequency = int(self.freq_input.currentText())
+    
+    def prompt_for_frequency_selection(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Select Sampling Frequency")
+        dialog.setModal(True)  # Makes the dialog blocking
+        
+        layout = QVBoxLayout()
+        
+        label = QLabel("Please select the sampling frequency of your input (Hz):")
+        layout.addWidget(label)
+        
+        # Adding frequency options as buttons for example
+        frequencies = ['64', '100', '128', '512', '1000']
+        for freq in frequencies:
+            btn = QPushButton(freq, dialog)
+            btn.clicked.connect(lambda ch, f=freq: self.set_frequency_and_close(dialog, f))
+            layout.addWidget(btn)
+        
+        dialog.setLayout(layout)
+        dialog.exec_()  # This will block until the dialog is closed
+
+    def set_frequency_and_close(self, dialog, freq):
+        self.freq_input.setCurrentText(freq)
+        self.sampling_frequency = int(self.freq_input.currentText())
+        dialog.accept()  # Close the dialog
+
+    def prepare_data_loading(self, filename):
+        self.download_dialog = QDialog(self)
+        self.download_dialog.setWindowTitle("Loading Data")
+        layout = QVBoxLayout(self.download_dialog)
+
+        # Setup progress bar
+        self.progress_bar = QProgressBar()
+        layout.addWidget(self.progress_bar)
+        layout.addWidget(QLabel("Accessing data, please wait..."))
+
+        self.download_dialog.setLayout(layout)
+        self.download_dialog.setModal(True)
+
+        # Setup thread
+        self.load_thread = LoadThread(filename)
+        self.load_thread.notifyProgress.connect(self.update_progress)
+        self.load_thread.dataLoaded.connect(self.set_data)
+        self.load_thread.finished.connect(self.finalize_data_loading)
+        self.load_thread.start()
+
+        self.download_dialog.exec_()  # This will block until the dialog is closed
+
+    def update_progress(self, value):
+        self.progress_bar.setValue(value)
+
+    def finalize_data_loading(self):
+        self.download_dialog.accept()  # Close the dialog
+        loaded_filename = os.path.basename(self.load_thread.filename)
+        self.filename_label.setText(f"Loaded File: {loaded_filename}")
+        self.filename_label.setToolTip(loaded_filename)
+        self.statusBar().showMessage('Data loaded and ready.')
 
     def load_eeg_data(self):
-        self.electrode_selected = False
-        self.emg_selected = False
+        # Ensure a valid frequency is selected
+        if self.freq_input.currentIndex() == -1:
+            self.prompt_for_frequency_selection()
 
-        #filename, _ = QFileDialog.getOpenFileName(self, 'Open file', '', 'CSV Files (*.csv *.gz)')
-
-        directory = QFileDialog.getExistingDirectory(self, 'Open folder', '', options = QFileDialog.ShowDirsOnly)
-
+        # Get directory from user
+        directory = QFileDialog.getExistingDirectory(self, 'Open folder')
         if directory:
-            # List the CSV and GZ files in the directory without loading them
+            # List CSV and GZ files in the directory
             filenames = [os.path.join(directory, file) for file in os.listdir(directory) if file.endswith(('.csv', '.gz'))]
+            if filenames:
+                dialog = FileSelectionDialog(filenames)
+                filename = dialog.getOpenFileName()
+                if filename:
+                    self.prepare_data_loading(filename)  # Start the data loading process
+                else:
+                    QMessageBox.warning(self, "File Selection", "No file was selected.")
+            else:
+                QMessageBox.warning(self, "File Selection", "No suitable files found in the directory.")
 
-            # Pass the filenames to a custom dialog for file selection
-            dialog = FileSelectionDialog(filenames)
-            filename = dialog.getOpenFileName()
 
-        if filename:
-            self.download_dialog = QDialog(self)
-            self.download_dialog.setWindowTitle("Loading Data")
-            layout = QVBoxLayout(self.download_dialog)
-            layout.addWidget(QLabel("Accessing data, please wait..."))
-            self.download_dialog.setLayout(layout)
-            self.download_dialog.setModal(True)
-            self.download_dialog.show()
-
-            self.load_thread = LoadThread(filename)
-            self.load_thread.notifyProgress.connect(self.update_status)
-            self.load_thread.dataLoaded.connect(self.set_data)
-            self.load_thread.finished.connect(self.download_dialog.accept)  # Close the dialog when the thread finishes
-            self.load_thread.start()
-            self.filename_label.setText(f"Loaded File: {os.path.basename(filename)}")  # Update the QLabel with the loaded filename
-            self.filename_label.setToolTip(os.path.basename(filename)) 
     
     def load_ann_data(self):
         try:
@@ -809,19 +887,37 @@ class SignalVisualizer(QMainWindow):
             if self.check_selections():
                 self.update_ethogram_plot()
 
-    def decimate_input_data(self, data):
-        downsample_factor = int(self.sampling_frequency/100)
+    def find_closest_frequency(self, input_frequency, target=100):
+        # Compute all possible divisors/factors of the input frequency
+        divisors = [i for i in range(1, input_frequency+1) if input_frequency % i == 0]
+        
+        # Find the divisor that is closest to the target frequency
+        closest_frequency = min(divisors, key=lambda x: abs(x - target))
+        
+        return closest_frequency
+
+    def decimate_input_data(self, data, original_frequency):
+        target_frequency = self.find_closest_frequency(original_frequency)
+        downsample_factor = original_frequency // target_frequency
+        # input data will be timestamps x channels. We shift polars -> np and then transpose for decimate to work in the rows
+        original_columns = data.columns
         print(f"Input data shape is {data.shape}")
-        print(f"Downsampling with factor {downsample_factor} from {self.sampling_frequency} into 100 Hz")
+        data = data.to_numpy().T
+        print(f"Downsampling with factor {downsample_factor} from {original_frequency} Hz to {target_frequency} Hz")
+        # Decimate data using the calculated downsample factor
         data_down = decimate(data, downsample_factor, ftype='fir')
+        data_down = pl.DataFrame(data_down.T, schema=original_columns)
         print(f"Decimated data shape is {data_down.shape}")
-        return data_down
+        return data_down, target_frequency
 
     def set_data(self, data):
-        self.sampling_frequency = self.freq_input.value()
+        if self.sampling_frequency > 100:
+            data, new_frequency = self.decimate_input_data(data, self.sampling_frequency)
+            self.sampling_frequency = new_frequency  # Update the frequency to the new downsampled rate
+            self.freq_input.setCurrentText(str(self.sampling_frequency)) # update the new frequency in the UI
+        self.data = data
+
         self.time_range = self.range_input.value()
-        # Receive the loaded data and store it in self.data
-        self.data = self.decimate_input_data(data)
         # Remove Outliers by clipping
         #self.data = self.remove_artifacts(self.data)
         # add emg diff assumes EMG1 - EMG2 is possible given names in data
@@ -880,7 +976,7 @@ class SignalVisualizer(QMainWindow):
         # re-start
         self.plot_from = 0
         self.current_position = 0
-        self.plot_to = self.range_input.value() * self.freq_input.value() 
+        self.plot_to = self.range_input.value() * self.sampling_frequency 
         self.sample_axis = np.arange(0, self.data.shape[0], 1)
         self.selected_electrode = self.eeg_plot_data.select(pl.col(self.electrode_input.currentText())).to_numpy().squeeze()
         # demean
@@ -921,7 +1017,7 @@ class SignalVisualizer(QMainWindow):
 
     def update_current_time_input(self):
          # update the time displayed in the time_input
-         current_time_sec = self.plot_from / self.freq_input.value()
+         current_time_sec = self.plot_from / self.sampling_frequency
          current_time = str(timedelta(seconds=current_time_sec))
          self.time_input.setText(current_time)
 
@@ -960,8 +1056,8 @@ class SignalVisualizer(QMainWindow):
         time_str = self.time_input.text()
         time_in_seconds = self.time_to_seconds(time_str)
         if time_in_seconds is not None:
-            self.plot_from = int(time_in_seconds * self.freq_input.value())
-            self.plot_to = self.plot_from + self.range_input.value() * self.freq_input.value()
+            self.plot_from = int(time_in_seconds * self.sampling_frequency)
+            self.plot_to = self.plot_from + self.range_input.value() * self.sampling_frequency
             self.update_current_time_input()
             self.current_position = int(self.time_to_seconds(self.time_input.text()) // self.win_sec)
             if self.data_loaded:
@@ -984,8 +1080,8 @@ class SignalVisualizer(QMainWindow):
 
     def update_position(self):
         self.current_position = int(self.time_to_seconds(self.time_input.text()) // self.win_sec)
-        self.plot_from = int(self.time_to_seconds(self.time_input.text()) * self.freq_input.value())
-        self.plot_to = self.plot_from + self.range_input.value() * self.freq_input.value()
+        self.plot_from = int(self.time_to_seconds(self.time_input.text()) * self.sampling_frequency)
+        self.plot_to = self.plot_from + self.range_input.value() * self.sampling_frequency
         self.update_current_time_input()
         if self.data_loaded:
             # Before updating the plots, recalculate start_pos and end_pos for the shaded region
@@ -998,7 +1094,7 @@ class SignalVisualizer(QMainWindow):
 
     # Define the jump_space_bar function to perform the space bar action
     def jump_space_bar(self):
-        current_time_sec = self.plot_from / self.freq_input.value()
+        current_time_sec = self.plot_from / self.sampling_frequency
         # Calculate the time to jump forward by self.space_bar_n * self.win_sec
         jump_time_seconds = self.space_bar_n * self.win_sec 
         next_time_seconds = current_time_sec + jump_time_seconds
@@ -1064,7 +1160,7 @@ class SignalVisualizer(QMainWindow):
 
     def update_plots(self):
         # Fetch the required parameters
-        self.sampling_frequency = self.freq_input.value()
+        #self.sampling_frequency = self.sampling_frequency
         self.time_range = self.range_input.value()
 
         # Compute buffer
