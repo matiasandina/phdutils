@@ -10,7 +10,7 @@ import polars as pl
 import numpy as np
 from datetime import timedelta
 from sklearn.preprocessing import minmax_scale, robust_scale
-from scipy.signal import hilbert, butter, filtfilt, sosfiltfilt
+from scipy.signal import hilbert, butter, filtfilt, sosfiltfilt, decimate
 from lspopt import spectrogram_lspopt
 import datetime
 
@@ -312,6 +312,12 @@ class SignalVisualizer(QMainWindow):
         self.eeg_group.setLayout(self.eeg_layout)
         self.input_layout.addWidget(self.eeg_group)
 
+        # Add a checkbox for toggling data scaling
+        self.scale_data_checkbox = QCheckBox("Scale Data", self)
+        self.scale_data_checkbox.setToolTip("Toggle to scale the data for better visualization")
+        self.scale_data_checkbox.stateChanged.connect(self.toggle_data_scaling)
+        self.eeg_layout.addWidget(self.scale_data_checkbox)
+
         # EMG Controls
         self.emg_group = QGroupBox("EMG Controls")
         self.emg_layout = QVBoxLayout()
@@ -608,7 +614,24 @@ class SignalVisualizer(QMainWindow):
         )
         return df
 
-    def normalize_data(self, method="robust"):
+    def apply_data_scaling(self):
+        print("Data scaling applied")
+        self.munge_data()
+
+    def show_original_data(self):
+        # Logic to revert any scaling and show data in its original form
+        print("Displaying original data")
+
+    def toggle_data_scaling(self):
+        if self.scale_data_checkbox.isChecked():
+            self.apply_data_scaling()
+        else:
+            self.show_original_data()
+
+    def normalize_data(self, method=None):
+        # If no method is specified, return the data as-is
+        if method is None:
+            return self.data
         assert method in ['robust', 'minmax'], f"Error: Scaling method must be either 'robust' (default) or 'minmax', received {method}"
         if method=="robust":
             return self.data.select(pl.all().map_batches(lambda x: pl.Series(robust_scale(x))))
@@ -786,11 +809,19 @@ class SignalVisualizer(QMainWindow):
             if self.check_selections():
                 self.update_ethogram_plot()
 
+    def decimate_input_data(self, data):
+        downsample_factor = int(self.sampling_frequency/100)
+        print(f"Input data shape is {data.shape}")
+        print(f"Downsampling with factor {downsample_factor} from {self.sampling_frequency} into 100 Hz")
+        data_down = decimate(data, downsample_factor, ftype='fir')
+        print(f"Decimated data shape is {data_down.shape}")
+        return data_down
+
     def set_data(self, data):
         self.sampling_frequency = self.freq_input.value()
         self.time_range = self.range_input.value()
         # Receive the loaded data and store it in self.data
-        self.data = data
+        self.data = self.decimate_input_data(data)
         # Remove Outliers by clipping
         #self.data = self.remove_artifacts(self.data)
         # add emg diff assumes EMG1 - EMG2 is possible given names in data
@@ -841,8 +872,10 @@ class SignalVisualizer(QMainWindow):
 
     def munge_data(self):
         #self.munge_dialog.show()
-        # normalize to plot 
-        self.eeg_plot_data = self.normalize_data()
+        # Determine the normalization method based on the checkbox state
+        scaling_method = "robust" if self.scale_data_checkbox.isChecked() else None
+        # Normalize the data according to the selected method
+        self.eeg_plot_data = self.normalize_data(method=scaling_method)
         # Determine data properties
         # re-start
         self.plot_from = 0
