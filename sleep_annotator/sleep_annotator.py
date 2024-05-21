@@ -699,6 +699,7 @@ class SignalVisualizer(QMainWindow):
     def show_original_data(self):
         # Logic to revert any scaling and show data in its original form
         print("Displaying original data")
+        self.munge_data()
 
     def toggle_data_scaling(self):
         if self.scale_data_checkbox.isChecked():
@@ -967,13 +968,17 @@ class SignalVisualizer(QMainWindow):
         return rms_values
 
     def munge_data(self):
+        #TODO: ADD THE MUNGE DIALOG
+        #TODO: SPLIT SCALING FROM MUNGING SO THAT WE DON'T RECOMPUTE SPECTROGRAM AND DELTA POWER
         #self.munge_dialog.show()
         # Determine the normalization method based on the checkbox state
         scaling_method = "robust" if self.scale_data_checkbox.isChecked() else None
         # Normalize the data according to the selected method
-        self.eeg_plot_data = self.normalize_data(method=scaling_method)
+        if scaling_method:
+            self.eeg_plot_data = self.normalize_data(method=scaling_method)
+        else:
+            self.eeg_plot_data = self.data  # Directly reference the original data without changes
         # Determine data properties
-        # re-start
         self.plot_from = 0
         self.current_position = 0
         self.plot_to = self.range_input.value() * self.sampling_frequency 
