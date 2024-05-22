@@ -857,14 +857,20 @@ class SignalVisualizer(QMainWindow):
         return rms_values
 
     def munge_data(self):
+        #TODO: ADD THE MUNGE DIALOG
+        #TODO: SPLIT SCALING FROM MUNGING SO THAT WE DON'T RECOMPUTE SPECTROGRAM AND DELTA POWER
         #self.munge_dialog.show()
-        # normalize to plot 
-        self.eeg_plot_data = self.normalize_data()
+        # Determine the normalization method based on the checkbox state
+        scaling_method = "robust" if self.scale_data_checkbox.isChecked() else None
+        # Normalize the data according to the selected method
+        if scaling_method:
+            self.eeg_plot_data = self.normalize_data(method=scaling_method)
+        else:
+            self.eeg_plot_data = self.data  # Directly reference the original data without changes
         # Determine data properties
-        # re-start
         self.plot_from = 0
         self.current_position = 0
-        self.plot_to = self.range_input.value() * self.freq_input.value() 
+        self.plot_to = self.range_input.value() * self.sampling_frequency 
         self.sample_axis = np.arange(0, self.data.shape[0], 1)
         self.selected_electrode = self.eeg_plot_data.select(pl.col(self.electrode_input.currentText())).to_numpy().squeeze()
         # demean
@@ -905,7 +911,7 @@ class SignalVisualizer(QMainWindow):
 
     def update_current_time_input(self):
          # update the time displayed in the time_input
-         current_time_sec = self.plot_from / self.freq_input.value()
+         current_time_sec = self.plot_from / self.sampling_frequency
          current_time = str(timedelta(seconds=current_time_sec))
          self.time_input.setText(current_time)
 
@@ -944,8 +950,8 @@ class SignalVisualizer(QMainWindow):
         time_str = self.time_input.text()
         time_in_seconds = self.time_to_seconds(time_str)
         if time_in_seconds is not None:
-            self.plot_from = int(time_in_seconds * self.freq_input.value())
-            self.plot_to = self.plot_from + self.range_input.value() * self.freq_input.value()
+            self.plot_from = int(time_in_seconds * self.sampling_frequency)
+            self.plot_to = self.plot_from + self.range_input.value() * self.sampling_frequency
             self.update_current_time_input()
             self.current_position = int(self.time_to_seconds(self.time_input.text()) // self.win_sec)
             if self.data_loaded:
@@ -968,8 +974,8 @@ class SignalVisualizer(QMainWindow):
 
     def update_position(self):
         self.current_position = int(self.time_to_seconds(self.time_input.text()) // self.win_sec)
-        self.plot_from = int(self.time_to_seconds(self.time_input.text()) * self.freq_input.value())
-        self.plot_to = self.plot_from + self.range_input.value() * self.freq_input.value()
+        self.plot_from = int(self.time_to_seconds(self.time_input.text()) * self.sampling_frequency)
+        self.plot_to = self.plot_from + self.range_input.value() * self.sampling_frequency
         self.update_current_time_input()
         if self.data_loaded:
             # Before updating the plots, recalculate start_pos and end_pos for the shaded region
@@ -982,7 +988,7 @@ class SignalVisualizer(QMainWindow):
 
     # Define the jump_space_bar function to perform the space bar action
     def jump_space_bar(self):
-        current_time_sec = self.plot_from / self.freq_input.value()
+        current_time_sec = self.plot_from / self.sampling_frequency
         # Calculate the time to jump forward by self.space_bar_n * self.win_sec
         jump_time_seconds = self.space_bar_n * self.win_sec 
         next_time_seconds = current_time_sec + jump_time_seconds
@@ -1048,7 +1054,7 @@ class SignalVisualizer(QMainWindow):
 
     def update_plots(self):
         # Fetch the required parameters
-        self.sampling_frequency = self.freq_input.value()
+        self.sampling_frequency = self.sampling_frequency
         self.time_range = self.range_input.value()
 
         # Compute buffer

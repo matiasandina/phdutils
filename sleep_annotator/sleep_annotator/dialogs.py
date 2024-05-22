@@ -2,6 +2,7 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 import polars as pl
+import os
 
 class FileSelectionDialog(QDialog):
     def __init__(self, filenames, parent=None):
@@ -39,7 +40,7 @@ class FileSelectionDialog(QDialog):
         self.exec_()
         return self.selected_file
 
-    def shorten_path(path):
+    def shorten_path(self, path):
         parts = path.split(os.sep)
         # Ensure there are enough parts to process
         if len(parts) > 4:
