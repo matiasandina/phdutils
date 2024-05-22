@@ -13,8 +13,9 @@ class LoadThread(QThread):
         self.filename = filename
 
     def run(self):
-        # Assuming we know how to calculate progress; here's a stub
-        data = pl.read_csv(self.filename)  # This does not naturally support progress updates
+        # This does not naturally support progress updates
+        # consider polars.read_csv_batched
+        data = pl.read_csv(self.filename)  
         # Simulate progress for demonstration
         for percent_complete in range(101):  # Simulate loading
             time.sleep(0.05)  # Simulate time delay
