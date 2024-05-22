@@ -574,7 +574,25 @@ class SignalVisualizer(QMainWindow):
         )
         return df
 
-    def normalize_data(self, method="robust"):
+    def apply_data_scaling(self):
+        print("Data scaling applied")
+        self.munge_data()
+
+    def show_original_data(self):
+        # Logic to revert any scaling and show data in its original form
+        print("Displaying original data")
+        self.munge_data()
+
+    def toggle_data_scaling(self):
+        if self.scale_data_checkbox.isChecked():
+            self.apply_data_scaling()
+        else:
+            self.show_original_data()
+
+    def normalize_data(self, method=None):
+        # If no method is specified, return the data as-is
+        if method is None:
+            return self.data
         assert method in ['robust', 'minmax'], f"Error: Scaling method must be either 'robust' (default) or 'minmax', received {method}"
         if method=="robust":
             return self.data.select(pl.all().map_batches(lambda x: pl.Series(robust_scale(x))))
