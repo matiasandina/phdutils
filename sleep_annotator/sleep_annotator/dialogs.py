@@ -4,16 +4,24 @@ from PyQt5.QtWidgets import *
 import polars as pl
 
 class FileSelectionDialog(QDialog):
-    def __init__(self, filenames):
-        super().__init__()
+    def __init__(self, filenames, parent=None):
+        super().__init__(parent)
 
+        self.setWindowTitle("Select EEG Data File")
         layout = QVBoxLayout(self)
         self.listWidget = QListWidget(self)
+        self.listWidget.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         layout.addWidget(self.listWidget)
 
-        # Add the filenames to the list widget
+        self.setMinimumSize(600, 300)  # Adjust as necessary
+
+        # Store full filenames to map back from selection
+        self.full_filenames = filenames
+
+        # Add the filenames to the list widget, using the shortened path
         for filename in filenames:
-            self.listWidget.addItem(filename)
+            shortened_filename = self.shorten_path(filename)
+            self.listWidget.addItem(shortened_filename)
 
         self.selected_file = None
 
@@ -22,12 +30,26 @@ class FileSelectionDialog(QDialog):
         self.button.clicked.connect(self.on_button_clicked)
 
     def on_button_clicked(self):
-        self.selected_file = self.listWidget.currentItem().text()
+        if self.listWidget.currentItem():  # Check if an item is selected
+            index = self.listWidget.currentRow()
+            self.selected_file = self.full_filenames[index]  # Retrieve full path
         self.close()
 
     def getOpenFileName(self):
         self.exec_()
         return self.selected_file
+
+    def shorten_path(path):
+        parts = path.split(os.sep)
+        # Ensure there are enough parts to process
+        if len(parts) > 4:
+            # Concatenate first two folders, ellipsis, and the last two segments
+            shortened = os.sep.join(parts[:3] + ['...'] + parts[-2:])
+        else:
+            # If not enough parts, just join them normally
+            shortened = os.sep.join(parts)
+        return shortened
+
 
 
 class FileDialog(QDialog):
