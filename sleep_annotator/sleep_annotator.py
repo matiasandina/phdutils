@@ -14,17 +14,6 @@ from scipy.signal import hilbert, butter, filtfilt, sosfiltfilt, decimate
 from lspopt import spectrogram_lspopt
 import datetime
 
-def shorten_path(path):
-    parts = path.split(os.sep)
-    # Ensure there are enough parts to process
-    if len(parts) > 4:
-        # Concatenate first two folders, ellipsis, and the last two segments
-        shortened = os.sep.join(parts[:3] + ['...'] + parts[-2:])
-    else:
-        # If not enough parts, just join them normally
-        shortened = os.sep.join(parts)
-    return shortened
-
 class FileSelectionDialog(QDialog):
     def __init__(self, filenames, parent=None):
         super().__init__(parent)
@@ -42,7 +31,7 @@ class FileSelectionDialog(QDialog):
 
         # Add the filenames to the list widget, using the shortened path
         for filename in filenames:
-            shortened_filename = shorten_path(filename)
+            shortened_filename = self.shorten_path(filename)
             self.listWidget.addItem(shortened_filename)
 
         self.selected_file = None
@@ -61,6 +50,16 @@ class FileSelectionDialog(QDialog):
         self.exec_()
         return self.selected_file
 
+    def shorten_path(path):
+        parts = path.split(os.sep)
+        # Ensure there are enough parts to process
+        if len(parts) > 4:
+            # Concatenate first two folders, ellipsis, and the last two segments
+            shortened = os.sep.join(parts[:3] + ['...'] + parts[-2:])
+        else:
+            # If not enough parts, just join them normally
+            shortened = os.sep.join(parts)
+        return shortened
 
 class FileDialog(QDialog):
     def __init__(self):
