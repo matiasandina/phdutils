@@ -5,7 +5,7 @@ from halo import Halo
 import time
 
 class LoadThread(QThread):
-    notifyProgress = pyqtSignal(str)
+    notifyProgress = pyqtSignal(int)  # Changed to emit integers representing progress
     dataLoaded = pyqtSignal(object)  # New signal that emits the loaded data
 
     def __init__(self, filename):
@@ -13,9 +13,13 @@ class LoadThread(QThread):
         self.filename = filename
 
     def run(self):
-        with Halo(text='Loading data...', spinner='dots'):
-            data = pl.read_csv(self.filename)  # Local variable to hold the data
-            time.sleep(0.1)  # allow some time for spinner to spin
-        self.dataLoaded.emit(data)  # Emit the loaded data
+        # Assuming we know how to calculate progress; here's a stub
+        data = pl.read_csv(self.filename)  # This does not naturally support progress updates
+        # Simulate progress for demonstration
+        for percent_complete in range(101):  # Simulate loading
+            time.sleep(0.05)  # Simulate time delay
+            self.notifyProgress.emit(percent_complete)  # Emit progress update
+        self.dataLoaded.emit(data)  # Emit loaded data once complete
         self.notifyProgress.emit('Data loaded.')
+
 
