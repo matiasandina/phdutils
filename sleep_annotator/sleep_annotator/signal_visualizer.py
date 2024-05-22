@@ -381,6 +381,9 @@ class SignalVisualizer(QMainWindow):
         self.munge_dialog.setLayout(munge_layout)
         self.munge_dialog.setModal(True)
 
+        # Status Bar
+        self.status_bar = self.statusBar()
+
     def update_sampling_frequency(self, index):
         if index == -1:
             # No selection made
@@ -447,37 +450,24 @@ class SignalVisualizer(QMainWindow):
         self.statusBar().showMessage('Data loaded and ready.')
 
     def load_eeg_data(self):
-        self.electrode_selected = False
-        self.emg_selected = False
+        # Ensure a valid frequency is selected
+        if self.freq_input.currentIndex() == -1:
+            self.prompt_for_frequency_selection()
 
-        #filename, _ = QFileDialog.getOpenFileName(self, 'Open file', '', 'CSV Files (*.csv *.gz)')
-
-        directory = QFileDialog.getExistingDirectory(self, 'Open folder', '', options = QFileDialog.ShowDirsOnly)
-
+        # Get directory from user
+        directory = QFileDialog.getExistingDirectory(self, 'Open folder')
         if directory:
-            # List the CSV and GZ files in the directory without loading them
+            # List CSV and GZ files in the directory
             filenames = [os.path.join(directory, file) for file in os.listdir(directory) if file.endswith(('.csv', '.gz'))]
-
-            # Pass the filenames to a custom dialog for file selection
-            dialog = FileSelectionDialog(filenames)
-            filename = dialog.getOpenFileName()
-
-        if filename:
-            self.download_dialog = QDialog(self)
-            self.download_dialog.setWindowTitle("Loading Data")
-            layout = QVBoxLayout(self.download_dialog)
-            layout.addWidget(QLabel("Accessing data, please wait..."))
-            self.download_dialog.setLayout(layout)
-            self.download_dialog.setModal(True)
-            self.download_dialog.show()
-
-            self.load_thread = LoadThread(filename)
-            self.load_thread.notifyProgress.connect(self.update_status)
-            self.load_thread.dataLoaded.connect(self.set_data)
-            self.load_thread.finished.connect(self.download_dialog.accept)  # Close the dialog when the thread finishes
-            self.load_thread.start()
-            self.filename_label.setText(f"Loaded File: {os.path.basename(filename)}")  # Update the QLabel with the loaded filename
-            self.filename_label.setToolTip(os.path.basename(filename)) 
+            if filenames:
+                dialog = FileSelectionDialog(filenames)
+                filename = dialog.getOpenFileName()
+                if filename:
+                    self.prepare_data_loading(filename)  # Start the data loading process
+                else:
+                    QMessageBox.warning(self, "File Selection", "No file was selected.")
+            else:
+                QMessageBox.warning(self, "File Selection", "No suitable files found in the directory.")
 
 
     def load_ann_data_directly(self):
@@ -867,7 +857,7 @@ class SignalVisualizer(QMainWindow):
             self.loader.start()
 
     def update_status(self, message):
-        self.statusBar().showMessage(message)
+        self.status_bar.showMessage(message)
 
     def update_current_time_input(self):
          # update the time displayed in the time_input
