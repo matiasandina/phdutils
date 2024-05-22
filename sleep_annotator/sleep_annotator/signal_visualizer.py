@@ -192,6 +192,12 @@ class SignalVisualizer(QMainWindow):
         self.eeg_group.setLayout(self.eeg_layout)
         self.input_layout.addWidget(self.eeg_group)
 
+        # Add a checkbox for toggling data scaling
+        self.scale_data_checkbox = QCheckBox("Scale Data", self)
+        self.scale_data_checkbox.setToolTip("Toggle to scale the data for better visualization")
+        self.scale_data_checkbox.stateChanged.connect(self.toggle_data_scaling)
+        self.eeg_layout.addWidget(self.scale_data_checkbox)
+
         # EMG Controls
         self.emg_group = QGroupBox("EMG Controls")
         self.emg_layout = QVBoxLayout()
