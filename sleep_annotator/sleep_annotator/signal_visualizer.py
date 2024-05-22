@@ -331,7 +331,7 @@ class SignalVisualizer(QMainWindow):
         self.power_plots.setWidget(self.power_plots_plot)  # Set the PlotWidget as the dock widget's widget
 
         # Variables
-        self.sampling_frequency = self.freq_input.value()
+        self.sampling_frequency = None
         self.time_range = self.range_input.value()
 
 
@@ -359,7 +359,7 @@ class SignalVisualizer(QMainWindow):
 
         # Updating/listeners
         self.range_input.valueChanged.connect(self.update_position)
-        self.freq_input.valueChanged.connect(self.update_position)
+        #self.freq_input.valueChanged.connect(self.update_position)
 
         #self.setGeometry(300, 300, 1200, 600
         self.setWindowIcon(QIcon('logo.png'))
@@ -381,6 +381,70 @@ class SignalVisualizer(QMainWindow):
         self.munge_dialog.setLayout(munge_layout)
         self.munge_dialog.setModal(True)
 
+    def update_sampling_frequency(self, index):
+        if index == -1:
+            # No selection made
+            self.prompt_for_frequency_selection()
+        else:
+            # Update the sampling frequency based on selected item
+            self.sampling_frequency = int(self.freq_input.currentText())
+    
+    def prompt_for_frequency_selection(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Select Sampling Frequency")
+        dialog.setModal(True)  # Makes the dialog blocking
+        
+        layout = QVBoxLayout()
+        
+        label = QLabel("Please select the sampling frequency of your input (Hz):")
+        layout.addWidget(label)
+        
+        # Adding frequency options as buttons for example
+        frequencies = ['64', '100', '128', '512', '1000']
+        for freq in frequencies:
+            btn = QPushButton(freq, dialog)
+            btn.clicked.connect(lambda ch, f=freq: self.set_frequency_and_close(dialog, f))
+            layout.addWidget(btn)
+        
+        dialog.setLayout(layout)
+        dialog.exec_()  # This will block until the dialog is closed
+
+    def set_frequency_and_close(self, dialog, freq):
+        self.freq_input.setCurrentText(freq)
+        self.sampling_frequency = int(self.freq_input.currentText())
+        dialog.accept()  # Close the dialog
+
+    def prepare_data_loading(self, filename):
+        self.download_dialog = QDialog(self)
+        self.download_dialog.setWindowTitle("Loading Data")
+        layout = QVBoxLayout(self.download_dialog)
+
+        # Setup progress bar
+        self.progress_bar = QProgressBar()
+        layout.addWidget(self.progress_bar)
+        layout.addWidget(QLabel("Accessing data, please wait..."))
+
+        self.download_dialog.setLayout(layout)
+        self.download_dialog.setModal(True)
+
+        # Setup thread
+        self.load_thread = LoadThread(filename)
+        self.load_thread.notifyProgress.connect(self.update_progress)
+        self.load_thread.dataLoaded.connect(self.set_data)
+        self.load_thread.finished.connect(self.finalize_data_loading)
+        self.load_thread.start()
+
+        self.download_dialog.exec_()  # This will block until the dialog is closed
+
+    def update_progress(self, value):
+        self.progress_bar.setValue(value)
+
+    def finalize_data_loading(self):
+        self.download_dialog.accept()  # Close the dialog
+        loaded_filename = os.path.basename(self.load_thread.filename)
+        self.filename_label.setText(f"Loaded File: {loaded_filename}")
+        self.filename_label.setToolTip(loaded_filename)
+        self.statusBar().showMessage('Data loaded and ready.')
 
     def load_eeg_data(self):
         self.electrode_selected = False
