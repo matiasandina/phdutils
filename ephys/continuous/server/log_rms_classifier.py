@@ -12,8 +12,10 @@ import json
 from sklearn.preprocessing import robust_scale, minmax_scale
 from scipy.signal import hilbert, butter, filtfilt, sosfiltfilt
 from yasa import sliding_window
+import argparse
 
 # GENERAL PARAMS
+# might be changed via argparse
 win_sec = 2.5 
 sampling_frequency = 100 #Hz
 
@@ -172,5 +174,25 @@ def main(root_dir, overwrite=True, scale=True):
 
 
 if __name__ == "__main__":
-    root = "/home/matias/Experiments/eeg_24h/data"
-    main(root)
+    parser = argparse.ArgumentParser(description="EEG Data Analysis Script")
+    parser.add_argument('--root_dir', type=str, default="/home/matias/Experiments/eeg_24h/data",
+                        help="Directory containing EEG data files")
+    parser.add_argument('--sampling_frequency', type=int, default=100,
+                        help="Sampling frequency in Hz")
+    parser.add_argument('--win_sec', type=float, default=2.5,
+                        help="Window size in seconds for analysis")
+
+    args = parser.parse_args()
+
+    # Update global variables from command line args if provided
+    sampling_frequency = args.sampling_frequency
+    win_sec = args.win_sec
+
+    # Print configuration details using console
+    console.log(f"Running Log RMS Sleep Staging with the following settings:")
+    console.info(f"Root Directory: {args.root_dir}")
+    console.info(f"Sampling Frequency: {sampling_frequency} Hz")
+    console.info(f"Window Size: {win_sec} seconds")
+    print("- -" * os.get_terminal_size().columns)
+    # Call main function with the root directory
+    main(args.root_dir)
