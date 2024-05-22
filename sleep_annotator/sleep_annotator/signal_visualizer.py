@@ -777,11 +777,37 @@ class SignalVisualizer(QMainWindow):
         except Exception as e:
             print(f"Error processing ethogram labels: {str(e)}")
 
+    def find_closest_frequency(self, input_frequency, target=100):
+        # Compute all possible divisors/factors of the input frequency
+        divisors = [i for i in range(1, input_frequency+1) if input_frequency % i == 0]
+        
+        # Find the divisor that is closest to the target frequency
+        closest_frequency = min(divisors, key=lambda x: abs(x - target))
+        
+        return closest_frequency
+
+    def decimate_input_data(self, data, original_frequency):
+        target_frequency = self.find_closest_frequency(original_frequency)
+        downsample_factor = original_frequency // target_frequency
+        # input data will be timestamps x channels. We shift polars -> np and then transpose for decimate to work in the rows
+        original_columns = data.columns
+        print(f"Input data shape is {data.shape}")
+        data = data.to_numpy().T
+        print(f"Downsampling with factor {downsample_factor} from {original_frequency} Hz to {target_frequency} Hz")
+        # Decimate data using the calculated downsample factor
+        data_down = decimate(data, downsample_factor, ftype='fir')
+        data_down = pl.DataFrame(data_down.T, schema=original_columns)
+        print(f"Decimated data shape is {data_down.shape}")
+        return data_down, target_frequency
+
     def set_data(self, data):
-        self.sampling_frequency = self.freq_input.value()
-        self.time_range = self.range_input.value()
-        # Receive the loaded data and store it in self.data
+        if self.sampling_frequency > 100:
+            data, new_frequency = self.decimate_input_data(data, self.sampling_frequency)
+            self.sampling_frequency = new_frequency  # Update the frequency to the new downsampled rate
+            self.freq_input.setCurrentText(str(self.sampling_frequency)) # update the new frequency in the UI
         self.data = data
+
+        self.time_range = self.range_input.value()
         # Remove Outliers by clipping
         #self.data = self.remove_artifacts(self.data)
         # add emg diff assumes EMG1 - EMG2 is possible given names in data
