@@ -10,7 +10,7 @@ import polars as pl
 import numpy as np
 from datetime import timedelta
 from sklearn.preprocessing import minmax_scale, robust_scale
-from scipy.signal import hilbert, butter, filtfilt, sosfiltfilt
+from scipy.signal import hilbert, butter, filtfilt, sosfiltfilt, decimate
 from lspopt import spectrogram_lspopt
 import datetime
 from plotting import SpectrogramPlotWidget
@@ -27,12 +27,14 @@ class SignalVisualizer(QMainWindow):
         self.layout = QVBoxLayout(self.central_widget)
 
         self.freq_label = QLabel("Sampling Frequency (Hz)", self)
-        self.freq_input = QSpinBox(self)
-        self.freq_input.setMinimum(1)
-        self.freq_input.setMaximum(10000)
-        self.freq_input.setValue(100)
+        self.freq_input = QComboBox(self)
+        # Populate the combo box with standard sampling frequencies
+        standard_frequencies = ['64', '100', '128', '256', '512', '1000']
+        self.freq_input.addItems(standard_frequencies)
+        self.freq_input.setCurrentIndex(-1)  # Set to no selection initially
         self.freq_input.setToolTip("Set the sampling frequency for the data visualization in Hz.")
         self.freq_label.setToolTip("Set the sampling frequency for the data visualization in Hz.")
+        self.freq_input.currentIndexChanged.connect(self.update_sampling_frequency)
 
         self.range_label = QLabel("Time Range (s)", self)
         self.range_label.setToolTip("Set the time in seconds for the data display window")
