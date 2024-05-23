@@ -65,6 +65,11 @@ class SignalVisualizer(QMainWindow):
         self.emg_selected = False
         self.emg_input.currentTextChanged.connect(self.select_emg)
 
+        # flags for computation
+        self.previous_electrode = None
+        self.need_recompute_spectrogram = True
+        self.need_recompute_hilbert = True
+
         # Explanation and controls for setting EEG Y range
         self.eeg_y_range_controls = QWidget()
         self.eeg_y_range_layout = QVBoxLayout()
@@ -129,8 +134,6 @@ class SignalVisualizer(QMainWindow):
         self.reset_spec_zoom_button.clicked.connect(self.reset_spectrogram_zoom)
 
         self.setWindowTitle("Sleep Visualizer")
-
-        self.statusBar().showMessage('Ready')
 
         # Top Menu
         self.exitAction = QAction(QIcon(), "Quit", self)
@@ -383,6 +386,8 @@ class SignalVisualizer(QMainWindow):
 
         # Status Bar
         self.status_bar = self.statusBar()
+        self.status_bar.showMessage('Ready to load data!')
+
 
     def update_sampling_frequency(self, index):
         if index == -1:
@@ -447,7 +452,7 @@ class SignalVisualizer(QMainWindow):
         loaded_filename = os.path.basename(self.load_thread.filename)
         self.filename_label.setText(f"Loaded File: {loaded_filename}")
         self.filename_label.setToolTip(loaded_filename)
-        self.statusBar().showMessage('Data loaded and ready.')
+        self.status_bar.showMessage('Data loaded and ready. Select electrodes to begin visualizing.')
 
     def load_eeg_data(self):
         # Ensure a valid frequency is selected
@@ -574,32 +579,6 @@ class SignalVisualizer(QMainWindow):
         )
         return df
 
-    def apply_data_scaling(self):
-        print("Data scaling applied")
-        self.munge_data()
-
-    def show_original_data(self):
-        # Logic to revert any scaling and show data in its original form
-        print("Displaying original data")
-        self.munge_data()
-
-    def toggle_data_scaling(self):
-        if self.scale_data_checkbox.isChecked():
-            self.apply_data_scaling()
-        else:
-            self.show_original_data()
-
-    def normalize_data(self, method=None):
-        # If no method is specified, return the data as-is
-        if method is None:
-            return self.data
-        assert method in ['robust', 'minmax'], f"Error: Scaling method must be either 'robust' (default) or 'minmax', received {method}"
-        if method=="robust":
-            return self.data.select(pl.all().map_batches(lambda x: pl.Series(robust_scale(x))))
-        if method=="minmax":
-            return self.data.select(pl.all().map_batches(lambda x: pl.Series(minmax_scale(x))))
-         
-
     def compute_hilbert(self):
         # Compute the Hilbert transform for each band for the entire dataset
         bands = {
@@ -614,6 +593,8 @@ class SignalVisualizer(QMainWindow):
         self.envelopes = pl.DataFrame()
 
         for band, (low, high) in bands.items():
+            self.status_bar.showMessage(f"Computing hilbert for band {(low, high)}")
+            print(f"Computing hilbert for band {(low, high)}")
             # Apply bandpass filter
             sos = butter(10, [low, high], btype='band', fs=self.sampling_frequency, output='sos')
             filtered = sosfiltfilt(sos, self.selected_electrode)
@@ -624,7 +605,7 @@ class SignalVisualizer(QMainWindow):
 
             # Store the envelope in the DataFrame
             self.envelopes = self.envelopes.with_columns(pl.Series(band, amplitude_envelope))
-    
+        self.status_bar.showMessage("Hilbert Computation Finished")
 
     def spectrogram_range_changed(self):
         # This method is called whenever the user zooms in or out of the spectrogram
@@ -697,27 +678,10 @@ class SignalVisualizer(QMainWindow):
 
         # shift t so that it starts at zero
         t = t - self.win_sec / 2
-
+        self.status_bar.showMessage("Spectrogram computation finished")
+        print("Spectrogram computation finished")
         return f, t, Sxx
-    
-
-    def select_electrode(self):
-        self.electrode_selected = True
-        if self.check_selections():
-            self.munge_data()
-
-    def select_emg(self):
-        self.emg_selected = True
-        if self.check_selections():
-            self.munge_data()
-
-    def check_selections(self):
-        # Check if both selections are made before munging data
-        if self.electrode_selected and self.emg_selected:
-            return True
-        else:
-            return False
-        
+            
     def apply_mappings(self, data, mappings):
         for column, map_dict in mappings.items():
             if column in data.columns:
@@ -800,33 +764,6 @@ class SignalVisualizer(QMainWindow):
         print(f"Decimated data shape is {data_down.shape}")
         return data_down, target_frequency
 
-    def set_data(self, data):
-        if self.sampling_frequency > 100:
-            data, new_frequency = self.decimate_input_data(data, self.sampling_frequency)
-            self.sampling_frequency = new_frequency  # Update the frequency to the new downsampled rate
-            self.freq_input.setCurrentText(str(self.sampling_frequency)) # update the new frequency in the UI
-        self.data = data
-
-        self.time_range = self.range_input.value()
-        # Remove Outliers by clipping
-        #self.data = self.remove_artifacts(self.data)
-        # add emg diff assumes EMG1 - EMG2 is possible given names in data
-        self.add_emg_diff()
-        self.data_loaded = True
-        # Determine the number of complete windows in the data
-        self.num_windows = int(self.data.shape[0] // (self.sampling_frequency * self.win_sec))
-        # Initialize the ethogram_labels
-        if self.ethogram_labels is None:
-            self.ethogram_labels = np.zeros(self.num_windows, dtype=int)
-        # Get the column names from the dataframe as a list of strings
-        electrode_names = self.data.columns
-        # Clear any old data from the QComboBox
-        self.electrode_input.clear()
-        # Add the electrode names to the QComboBox
-        self.electrode_input.addItems(electrode_names)
-        self.emg_input.addItems(electrode_names)
-        self.current_position = 0
-
     # notoriously hard to clip the axes with a rule of thumb
     def return_clipped_range(self, array, clip = 0.8):
         min_val = np.min(array)
@@ -836,16 +773,6 @@ class SignalVisualizer(QMainWindow):
     def add_emg_diff(self):
         self.data = self.data.with_columns((pl.col("EMG1") - pl.col('EMG2')).alias('emg_diff'))
     
-    def process_emg(self, emg):
-        rms = np.log(np.sqrt(np.sum(emg * emg) / len(emg)))
-        return rms
-
-    #convolve is not what we want here, we want to have RMS match the spectrogram
-    #def window_rms(self, signal, window_size):
-    #    signal2 = np.power(signal, 2)
-    #    window = np.ones(window_size)/float(window_size)
-    #    return np.sqrt(np.convolve(signal2, window, 'valid'))
-
     def window_rms(self, signal, window_size):
         # let's make sure window_size is an int here
         window_size = int(window_size)
@@ -856,31 +783,162 @@ class SignalVisualizer(QMainWindow):
             rms_values[i] = np.sqrt(np.mean(segment ** 2))
         return rms_values
 
-    def munge_data(self):
-        #TODO: ADD THE MUNGE DIALOG
-        #TODO: SPLIT SCALING FROM MUNGING SO THAT WE DON'T RECOMPUTE SPECTROGRAM AND DELTA POWER
-        #self.munge_dialog.show()
-        # Determine the normalization method based on the checkbox state
+    def update_normalization(self):
         scaling_method = "robust" if self.scale_data_checkbox.isChecked() else None
-        # Normalize the data according to the selected method
         if scaling_method:
             self.eeg_plot_data = self.normalize_data(method=scaling_method)
+            if self.check_selections():
+                self.update_selected_eeg()
         else:
             self.eeg_plot_data = self.data  # Directly reference the original data without changes
-        # Determine data properties
-        self.plot_from = 0
-        self.current_position = 0
-        self.plot_to = self.range_input.value() * self.sampling_frequency 
-        self.sample_axis = np.arange(0, self.data.shape[0], 1)
+            if self.check_selections():
+                self.update_selected_eeg()
+
+    def toggle_data_scaling(self):
+        if self.scale_data_checkbox.isChecked():
+            print("Data scaling applied")
+        else:
+            print("Displaying original data")
+        self.update_normalization()
+
+    def normalize_data(self, method=None):
+        # If no method is specified, return the data as-is
+        if method is None:
+            return self.data
+        assert method in ['robust', 'minmax'], f"Error: Scaling method must be either 'robust' (default) or 'minmax', received {method}"
+        if method=="robust":
+            return self.data.select(pl.all().map_batches(lambda x: pl.Series(robust_scale(x))))
+        if method=="minmax":
+            return self.data.select(pl.all().map_batches(lambda x: pl.Series(minmax_scale(x))))
+    
+    def update_selected_eeg(self):
         self.selected_electrode = self.eeg_plot_data.select(pl.col(self.electrode_input.currentText())).to_numpy().squeeze()
         # demean
         self.selected_electrode = self.selected_electrode - np.mean(self.selected_electrode)
+        if self.check_selections():
+            self.restore_plotting_axis()
+
+            if self.need_recompute_spectrogram:
+                print(f"Needed to recompute the spectrogram. Triggering from update_selected_electrode")
+                self.spectrogram = self.compute_spectrogram()
+                self.spec_img = None
+                self.need_recompute_spectrogram = False  # Reset the flag
+                self.status_bar.showMessage("Spectrogram updated.")
+
+            if self.need_recompute_hilbert:
+                    print(f"Needed to recompute hilbert. Triggering from update_selected_electrode")
+                    self.compute_hilbert()
+                    self.need_recompute_hilbert = False  # Reset the flag
+                    self.status_bar.showMessage("Hilbert transform updated.")            
+
+            # update all plots
+            self.update_plots()
+            # get to the current point
+            self.jump_to_time()
+        else:
+            print("Please select EMG channel to trigger plot visualization")    
+    
+    def update_selected_emg(self):
         #self.selected_electrode_y_range = self.return_clipped_range(self.selected_electrode)
         self.selected_emg_channel = self.eeg_plot_data.select(pl.col(self.emg_input.currentText())).to_numpy().squeeze()
         # demean
         self.selected_emg_cannel = self.selected_emg_channel - np.mean(self.selected_emg_channel)
         self.log_rms_emg = self.window_rms(signal = self.selected_emg_channel, window_size = self.win_sec * self.sampling_frequency)
         self.log_rms_emg = np.log10(self.log_rms_emg)
+        if self.check_selections():
+            self.update_selected_eeg()
+        else:
+            print("Please select EEG channel to trigger plot visualization")   
+    
+    def select_electrode(self):
+        # Check if a valid index is selected
+        if self.electrode_input.currentIndex() != -1:
+            current_electrode = self.electrode_input.currentText()
+            if current_electrode != self.previous_electrode:
+                print(f"Electrode changed from {self.previous_electrode} to {current_electrode}. Recomputing necessary data.")
+                self.status_bar.showMessage(f"Electrode changed: {current_electrode}. Recomputing necessary data.")
+                self.previous_electrode = current_electrode
+                # Set flags to recompute since electrode has changed
+                self.need_recompute_spectrogram = True
+                self.need_recompute_hilbert = True
+            else:
+                print(f"Selected {current_electrode} as EEG electrode.")
+                self.status_bar.showMessage(f"Selected {current_electrode} as EEG electrode.")
+
+            self.electrode_selected = True
+            self.update_selected_eeg()
+
+    def select_emg(self):
+        # Check if a valid index is selected
+        if self.emg_input.currentIndex() != -1:
+            print(f"Selected {self.emg_input.currentText()} as EMG electrode")
+            self.status_bar.showMessage(f"Selected {self.emg_input.currentText()} as EMG electrode.")
+            self.emg_selected = True
+            self.update_selected_emg()
+
+    def check_selections(self):
+        # Check if both selections are made before munging data
+        if self.electrode_selected and self.emg_selected:
+            return True
+        else:
+            return False
+
+    def restore_plotting_axis(self):
+        # Determine data properties
+        self.plot_from = 0
+        self.current_position = 0
+        self.plot_to = self.range_input.value() * self.sampling_frequency 
+        self.sample_axis = np.arange(0, self.data.shape[0], 1)
+
+    def set_data(self, data):
+        if self.sampling_frequency > 100:
+            data, new_frequency = self.decimate_input_data(data, self.sampling_frequency)
+            self.sampling_frequency = new_frequency  # Update the frequency to the new downsampled rate
+            self.freq_input.setCurrentText(str(self.sampling_frequency)) # update the new frequency in the UI
+        # Set the original data
+        self.data = data
+        # Remove Outliers by clipping
+        #self.data = self.remove_artifacts(self.data)
+
+        # add emg diff assumes EMG1 - EMG2 is possible given names in data
+        # self.add_emg_diff()
+        # This will create self.eeg_plot_data
+        self.update_normalization()
+        self.restore_plotting_axis()
+        self.time_range = self.range_input.value()
+
+        self.data_loaded = True
+        # Determine the number of complete windows in the data
+        self.num_windows = int(self.data.shape[0] // (self.sampling_frequency * self.win_sec))
+        # Initialize the ethogram_labels
+        if self.ethogram_labels is None:
+            self.ethogram_labels = np.zeros(self.num_windows, dtype=int)
+        # Get the column names from the dataframe as a list of strings
+        electrode_names = self.data.columns
+        # Clear any old data from the QComboBox
+        self.electrode_input.clear()
+        self.emg_input.clear()
+        # Disconnect signal
+        self.electrode_input.currentTextChanged.disconnect()
+        self.emg_input.currentTextChanged.disconnect()
+        # Update combo box as needed
+        self.electrode_input.addItems(electrode_names)
+        self.emg_input.addItems(electrode_names)
+        self.electrode_input.setCurrentIndex(-1)
+        self.emg_input.setCurrentIndex(-1)
+        # Reconnect signal
+        self.electrode_input.currentTextChanged.connect(self.select_electrode)
+        self.emg_input.currentTextChanged.connect(self.select_emg)
+
+        self.current_position = 0
+
+    def munge_data(self):
+        #TODO: ADD THE MUNGE DIALOG
+        #self.munge_dialog.show()
+        self.update_normalization()
+        self.update_selected_eeg()
+        self.update_selected_emg()
+        self.restore_plotting_axis()
         # Compute spectrogram
         self.spectrogram = self.compute_spectrogram()
         # Mark spec_img as none, so that update_spec re-plots
@@ -1056,26 +1114,18 @@ class SignalVisualizer(QMainWindow):
         # Fetch the required parameters
         self.sampling_frequency = self.sampling_frequency
         self.time_range = self.range_input.value()
-
         # Compute buffer
         self.plot_from_buffer = max(int(round(self.plot_from - self.win_sec * self.sampling_frequency)), 0)
-
         # Compute x-axis for plot: use self.plot_from_buffer here
         self.plot_x_axis = self.sample_axis[self.plot_from_buffer:self.plot_to]
-    
         # Conversion from sample domain to time domain
         self.plot_x_axis_time = np.array(self.plot_x_axis) / self.sampling_frequency
-
         # Create tick labels
         self.x_tick_labels = np.arange(0, self.plot_x_axis_time[-1], self.win_sec)
         self.x_tick_labels_str = [self.pretty_time_label(seconds = i) for i in self.x_tick_labels]
-
-
         # Create the tick positions for these labels in the sample domain
         #self.x_tick_positions = self.x_tick_labels * self.sampling_frequency
         self.x_tick_positions = [int(round(label * self.sampling_frequency)) for label in self.x_tick_labels]
-
-
         # Call the update function for each plot
         self.update_eeg_plot()
         self.update_selected_emg_plot()

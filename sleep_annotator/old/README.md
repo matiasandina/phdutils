@@ -1,5 +1,8 @@
 ## Sleep Annotator
 
+> [!WARNING]  
+> This folder contains old code and no longer will be updated. Use the version provided in the other folders in the repo.
+
 Preliminar release of the sleep annotator.
 You are advised to run this on a virtual environment.
 This software was tested using Python 3.10 (python 3.10+ likely to work) and is cross-platform (Unix, Windows).

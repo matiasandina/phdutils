@@ -14,7 +14,7 @@ class FileSelectionDialog(QDialog):
         self.listWidget.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         layout.addWidget(self.listWidget)
 
-        self.setMinimumSize(600, 300)  # Adjust as necessary
+        self.setMinimumSize(800, 300)  # Adjust as necessary
 
         # Store full filenames to map back from selection
         self.full_filenames = filenames

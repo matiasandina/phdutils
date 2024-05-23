@@ -18,7 +18,7 @@ class LoadThread(QThread):
         data = pl.read_csv(self.filename)  
         # Simulate progress for demonstration
         for percent_complete in range(101):  # Simulate loading
-            time.sleep(0.05)  # Simulate time delay
+            time.sleep(0.01)  # Simulate time delay
             self.notifyProgress.emit(percent_complete)  # Emit progress update
         self.dataLoaded.emit(data)  # Emit loaded data once complete
         self.notifyProgress.emit('Data loaded.')
