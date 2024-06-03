@@ -1103,8 +1103,9 @@ class SignalVisualizer(QMainWindow):
             else:
                 self.spec_img = None  # Reset spec_img to force replot with new spectrogram data
                 # Recompute the spectrogram     
-                self.spectrogram = self.compute_spectrogram()
-                self.update_plots()
+                self.need_recompute_spectrogram = True
+                self.update_selected_emg()
+                
 
         except ValueError:
             QMessageBox.warning(self, "Invalid input", "Please input a valid number.")
