@@ -835,6 +835,114 @@ class TC720():
         location_code = 'e' + str(location-1)
         self.send_message(self.message_builder(location_code, self.int_to_hex(repeat_loc)), write=True)
 
+    #==========================================================================
+    #    Ramp/soak mode PID control
+    #==========================================================================
+
+    def get_proportional_bandwidth(self):
+        """Get the proportional bandwidth (in °C)."""
+        self.send_message(self.message_builder('51'))  # Command for reading proportional bandwidth
+        return self.response_to_int(self.read_message()) / 100  # Convert from hex and scale
+    
+    def get_integral_gain(self):
+        """Get the integral gain (in repeats/minute)."""
+        self.send_message(self.message_builder('52'))  # Command for reading integral gain
+        return self.response_to_int(self.read_message()) / 100  # Convert and scale appropriately
+    
+    def get_derivative_gain(self):
+        """Get the derivative gain (in minutes)."""
+        self.send_message(self.message_builder('53'))  # Command for reading derivative gain
+        return self.response_to_int(self.read_message()) / 100  # Convert and scale
+    
+    def set_proportional_bandwidth(self, bandwidth):
+        """Set the proportional bandwidth (in °C)."""
+        value = int(bandwidth * 100)  # Multiply by 100 and convert to int
+        hex_value = self.int_to_hex(value)  # Convert to hex
+        self.send_message(self.message_builder('1d', hex_value))  # Send message
+    
+    def set_integral_gain(self, gain):
+        """Set the integral gain (in repeats/minute)."""
+        value = int(gain * 100)
+        hex_value = self.int_to_hex(value)
+        self.send_message(self.message_builder('1e', hex_value))
+    
+    def set_derivative_gain(self, gain):
+        """Set the derivative gain (in minutes)."""
+        value = int(gain * 100)
+        hex_value = self.int_to_hex(value)
+        self.send_message(self.message_builder('1f', hex_value))
+    
+    def get_location_proportional(self, location):
+        """Retrieve the proportional bandwidth for a specific ramp/soak location."""
+        # Step 1: Set the index with command 82 (using write mode to acknowledge index setting)
+        self.send_message(self.message_builder('82', self.int_to_hex(location)), write=True)
+        # Step 2: Read the proportional bandwidth with command 84 (handled as a special command)
+        response = self.send_message(self.message_builder('84', self.int_to_hex(location)))
+        # Process and return the response value
+        print(f"Proportional Value Response: {response}")
+        return self.response_to_int(response) / 100    
+
+    def _get_location_proportional_raw(controller, location):
+        """Directly communicate with the controller to get the proportional bandwidth."""
+        # Step 1: Set the index for the location with command 82
+        set_index_message = controller.message_builder('82', controller.int_to_hex(location))
+        print(f"Setting index with message: {''.join(set_index_message)}")
+        controller.ser.write(''.join(set_index_message).encode('utf-8'))
+        index_response = controller.ser.read(10)
+        print(f"Index set response: {index_response}")
+        # Step 2: Send the read command with index using command 84
+        read_message = controller.message_builder('84', controller.int_to_hex(location))
+        print(f"Reading proportional value with message: {''.join(read_message)}")
+        controller.ser.write(''.join(read_message).encode('utf-8'))
+        read_response = controller.ser.read(10)
+        print(f"Proportional value read response: {read_response}")
+        # Interpret the response
+        return controller.response_to_int(read_response) / 100
+
+    def get_location_integral(self, location):
+        """Retrieve the integral gain for a specific ramp/soak location."""
+        # Step 1: Set the index with command 85 (using write mode to acknowledge index setting)
+        self.send_message(self.message_builder('85', self.int_to_hex(location)), write=True)
+        # Step 2: Read the integral gain with command 87 (handled as a special command)
+        response = self.send_message(self.message_builder('87', self.int_to_hex(location)))
+        # Process and return the response value
+        print(f"Integral Gain Response: {response}")
+        return self.response_to_int(response) / 100
+
+    def get_location_derivative(self, location):
+        """Retrieve the derivative gain for a specific ramp/soak location."""
+        # Step 1: Set the index with command 88 (using write mode to acknowledge index setting)
+        self.send_message(self.message_builder('88', self.int_to_hex(location)), write=True)
+        # Step 2: Read the derivative gain with command 8a (handled as a special command)
+        response = self.send_message(self.message_builder('8a', self.int_to_hex(location)))
+        # Process and return the response value
+        print(f"Derivative Gain Response: {response}")
+        return self.response_to_int(response) / 100
+
+    def set_location_proportional(self, location, bandwidth):
+        """Set the proportional bandwidth for a specific ramp/soak location."""
+        # Set the index for the location (use command 82)
+        self.send_message(self.message_builder('82', self.int_to_hex(location)), write = True)
+        # Now write the proportional value at the specified index (use command 83)
+        hex_value = self.int_to_hex(int(bandwidth * 100))
+        self.send_message(self.message_builder('83', hex_value), write=True)
+
+    def set_location_integral(self, location, gain):
+        """Set the integral gain for a specific ramp/soak location."""
+        # Set the index for the location (use command 85)
+        self.send_message(self.message_builder('85', self.int_to_hex(location)))
+        # Now write the integral value at the specified index (use command 86)
+        hex_value = self.int_to_hex(int(gain * 100))
+        self.send_message(self.message_builder('86', hex_value), write=True)
+
+    def set_location_derivative(self, location, gain):
+        """Set the derivative gain for a specific ramp/soak location."""
+        # Set the index for the location (use command 88)
+        self.send_message(self.message_builder('88', self.int_to_hex(location)))
+        # Now write the derivative value at the specified index (use command 89)
+        hex_value = self.int_to_hex(int(gain * 100))
+        self.send_message(self.message_builder('89', hex_value), write=True)
+
     #--------------------------------------------------------------------------
     #    Start stop functions
     #--------------------------------------------------------------------------
