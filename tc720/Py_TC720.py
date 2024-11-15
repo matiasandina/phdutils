@@ -1042,20 +1042,23 @@ class TC720():
             If the location = 8, it will go to location 1. 
         
         """
-        #Check input
+        # Check input
         self.validate_data(location)
 
         self.set_soak_temp(location, temp)
         self.set_ramp_time(location, ramp_time)
         self.set_soak_time(location, soak_time)
         self.set_repeats(location, repeats)
-        if go_to == None:
-            l = [1,2,3,4,5,6,7,8]
-            next_loc = l[((location)%8)]
-        elif type(go_to) != int or (1< repeat_loc > 8):
-            raise ValueError('Invalid go_to: "{}", type: "{}". Must be a integer in the range 1-8.'.format(go_to, type(go_to)))
+
+        if go_to is None:
+            # Default to the next location in sequence (wrap around to 1 after 8)
+            next_loc = (location % 8) + 1
+        elif isinstance(go_to, int) and 1 <= go_to <= 8:
+            # Use the specified `go_to` value
+            next_loc = go_to
         else:
-            next_loc = location + 100
+            raise ValueError(f'Invalid go_to: "{go_to}", type: "{type(go_to)}". '
+                         'Must be an integer in the range 1-8.')
         self.set_repeat_location(location, next_loc)
      
     #==========================================================================
