@@ -496,6 +496,17 @@ class TC720():
         self.send_message(self.message_builder('02'))
         return self.response_to_int(self.read_message())
 
+    def get_output_percent(self):
+        """
+        Get the current output level as a percentage.
+        Converts the output range -511 to 511 to a percentage:
+        -511 represents -100% (cooling), and 511 represents 100% (heating).
+    
+        Returns:
+            float: Current output as a percentage (-100.0 to 100.0).
+        """
+        raw_output = self.get_output()  # Use the existing get_output method
+        return (raw_output / 511) * 100
 
     def get_set_output(self):
         """
