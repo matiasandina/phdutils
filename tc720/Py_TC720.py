@@ -483,7 +483,15 @@ class TC720():
         Returns set temperature in degree Celsius
 
         """
-        self.send_message(self.message_builder('50'))
+        self.send_message(self.message_builder('06'))
+        # TODO: I think the name of the function and command is confusing
+        # this is to use in the fixed mode it doesn't work on ramps
+        # FIXED DESIRED CONTROL SETTING
+        # Write Command: 1c
+        # Read Command: 50
+        # Interpret: To send a set temperature, multiply the decimal value by 10010 and convert to hexadecimal. To read
+        # the set temperature, convert the returned hexadecimal value to decimal, and then divide by 10010. 
+        #self.send_message(self.message_builder('50'))
         return self.response_to_int(self.read_message()) / 100
 
     def get_output(self):
@@ -506,7 +514,7 @@ class TC720():
             float: Current output as a percentage (-100.0 to 100.0).
         """
         raw_output = self.get_output()  # Use the existing get_output method
-        return (raw_output / 511) * 100
+        return round((raw_output / 511) * 100, 2)
 
     def get_set_output(self):
         """
@@ -624,6 +632,15 @@ class TC720():
         self.send_message(self.message_builder(location_code))
         return self.response_to_int(self.read_message())
 
+    def get_increment_counter(self):
+        """
+        Get the Ramp/Soak increment counter in seconds.
+        Multiplies the counter value by 0.05 to convert to seconds.
+        """
+        self.send_message(self.message_builder('f5'))
+        counter_value = self.response_to_int(self.read_message())
+        return counter_value * 0.05
+    
     def validate_data(self, input):
         """
         Check if the input for a location is valid.
