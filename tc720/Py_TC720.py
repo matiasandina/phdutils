@@ -61,6 +61,7 @@ import time
 import numpy as np
 from collections import deque
 import warnings
+import inspect
 
 #_______________________________________________________________________________
 #   FIND SERIAL PORT
@@ -679,11 +680,13 @@ class TC720():
 
         """
         if desired_mode not in [0, 1, 2]:
-            raise ValueError('Invalid input: {}, should be integer 0, 1 or 2'.format(repr(desired_mode)))
+            raise ValueError(f'Invalid input: {repr(desired_mode)}, should be integer 0, 1 or 2')
 
         cur_mode = self.get_mode()
-        if not  cur_mode == desired_mode:
-            warnings.warn('TC720: {} is not set in the right mode to use this function. Current mode: {}, set the machine in the {} mode using set_mode({})'.format(self.name, cur_mode, desired_mode, desired_mode))
+        if cur_mode != desired_mode:
+            # Get the name of the calling function
+            calling_function = inspect.stack()[1].function
+            warnings.warn(f'TC720: {self.name} is not set in the right mode to use the function "{calling_function}". Current mode: {cur_mode}, set the machine in the {desired_mode} mode using set_mode({desired_mode})')
             return False
         else:
             return True
