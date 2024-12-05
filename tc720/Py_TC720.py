@@ -2,10 +2,10 @@
 #Python 3 package to control the TC-720 temperature controller from:
 #TE Technology Inc. (https://tetech.com/)
 
-#Date: 7 September 2018, November 2024
-#Author: Lars E. Borm , Matias Andina
-#E-mail: lars.borm@ki.se or larsborm@hotmail.com, mandina@mit.edu
-#Python version: 3.5.4, 3.12
+#Date: 7 September 2018
+#Author: Lars E. Borm
+#E-mail: lars.borm@ki.se or larsborm@hotmail.com
+#Python version: 3.5.4
 
 #Based on TC-720 operating Manual; Appendix B - USB Communication
 #https://tetech.com/product/tc-720/
@@ -61,7 +61,6 @@ import time
 import numpy as np
 from collections import deque
 import warnings
-import inspect
 
 #_______________________________________________________________________________
 #   FIND SERIAL PORT
@@ -84,7 +83,7 @@ def find_address(identifier = None):
     """
     found = False
     if identifier != None:
-        port = [i for i in list_ports.grep(identifier)]
+        port = [i for i in list(list_ports.grep(identifier))]
         
         if len(port) == 1:
             print('Device address: {}'.format(port[0].device))
@@ -93,11 +92,10 @@ def find_address(identifier = None):
             print('''No devices found using identifier: {}
             \nContinue with manually finding USB address...\n'''.format(identifier))
         else:
-            for p in port:
+            for p in connections:
                 print('{:15}| {:15} |{:15} |{:15} |{:15}'.format('Device', 'Name', 'Serial number', 'Manufacturer', 'Description') )
                 print('{:15}| {:15} |{:15} |{:15} |{:15}\n'.format(str(p.device), str(p.name), str(p.serial_number), str(p.manufacturer), str(p.description)))
-            warnings.warn("The input returned multiple devices, see above. Returning list of devices")
-            return port
+            raise Exception("""The input returned multiple devices, see above.""")
 
     if found == False:
         print('Performing manual USB address search.')
@@ -320,11 +318,7 @@ class TC720():
             '87': 'integral_read',         # Read integral gain
             '88': 'derivative_set_index',  # Set index for derivative gain
             '89': 'derivative_write',      # Write derivative gain
-            '8a': 'derivative_read',        # Read derivative gain
-            'f1': 'timer_run_method_read',  # Add f1 to handle timer run method reading
-            '0a': 'stage_pointer_read',     # Add 0a to handle stage pointer reading
-            'f3': 'ramp_soak_delta_read',  # Read ramp soak delta
-            'f2': 'ramp_soak_delta_write'  # Write ramp soak delta
+            '8a': 'derivative_read'        # Read derivative gain
         }
 
         # Clear reply buffer
@@ -543,16 +537,15 @@ class TC720():
         #Ask for status
         self.send_message(self.message_builder('09'))
         response = self.read_message()
+        
         #Convert to binary code where each bit marks an running operation.
         response_bit = bin(int(response[1:5], base=16))  
         status_response = '{0:03}'.format(int(response_bit[2:]))
+        
         if status_response == '000':
             return 'No sequence running'
         else:
-            # from the manual Ramp stage will 
-            # convert to 101 where Bit 0 (the rightmost bit) is set and Bit 2 is set
-            # So we get 101 -> ["Ramp stage", "Sequence Running"]
-            status_list = ['Ramp stage', 'Soak stage', 'Sequence Running']
+            status_list = ['Sequence Running', 'Soak stage', 'Ramp stage']
             return [status_list[n] for n,i in enumerate(status_response) if i == '1']
             
     def get_soak_temp(self, location):
@@ -603,18 +596,6 @@ class TC720():
         location_code = 'c' + hex(location + 7)[-1]
         self.send_message(self.message_builder(location_code))
         return self.response_to_int(self.read_message())
-
-    def get_stage_pointer(self):
-        """
-        Retrieve the current stage pointer in the ramp/soak sequence.
-        Returns:
-            int: Current stage pointer value (1 through 8).
-        """
-        # Send the read command '0a' with no additional data
-        response = self.send_message(self.message_builder('0a'))
-        pointer = self.response_to_int(response)
-        return pointer
-
 
     def get_repeats(self, location):
         """
@@ -680,13 +661,11 @@ class TC720():
 
         """
         if desired_mode not in [0, 1, 2]:
-            raise ValueError(f'Invalid input: {repr(desired_mode)}, should be integer 0, 1 or 2')
+            raise ValueError('Invalid input: {}, should be integer 0, 1 or 2'.format(repr(desired_mode)))
 
         cur_mode = self.get_mode()
-        if cur_mode != desired_mode:
-            # Get the name of the calling function
-            calling_function = inspect.stack()[1].function
-            warnings.warn(f'TC720: {self.name} is not set in the right mode to use the function "{calling_function}". Current mode: {cur_mode}, set the machine in the {desired_mode} mode using set_mode({desired_mode})')
+        if not  cur_mode == desired_mode:
+            warnings.warn('TC720: {} is not set in the right mode to use this function. Current mode: {}, set the machine in the {} mode using set_mode({})'.format(self.name, cur_mode, desired_mode, desired_mode))
             return False
         else:
             return True
@@ -734,7 +713,7 @@ class TC720():
 
         #Check mode
         self.verboseprint("Checking mode to use `set_control_type`")
-        # self.check_mode(0)
+        self.check_mode(0)
 
         #Set the control type
         self.send_message(self.message_builder('3f',  self.int_to_hex(control_type)), write=True)
@@ -855,9 +834,7 @@ class TC720():
         Input:
         `location`(int): locations 1-8
         `Repeats`(int): Number of times the temperature sequence should be 
-            repeated (i.e., 
-            repeats == 2 will perform the action the first time, plus 
-            2 repeats for a total of 3 times). 
+            repeated. 
         
         """
         #Check input
@@ -993,29 +970,6 @@ class TC720():
         # Now write the derivative value at the specified index (use command 89)
         hex_value = self.int_to_hex(int(gain * 100))
         self.send_message(self.message_builder('89', hex_value), write=True)
-    
-    def set_timer_run_method(self, method):
-        """
-        Set the ramp/soak timer run method.
-        Args:
-            method (int): Timer run method. 
-                        0 = Set Temp Only, 1 = Wait for control temp.
-        """
-        if method not in [0, 1]:
-            raise ValueError("Invalid method. Must be 0 (Set Temp Only) or 1 (Wait for control temp).")
-        hex_value = self.int_to_hex(method)
-        self.send_message(self.message_builder('f0', hex_value), write=True)
-        available_methods = ["Set Temp Only", "Wait for control temp"]
-        print(f"Timer Run Method set to method {method}: {available_methods[method]}")
-
-    def get_timer_run_method(self):
-        """
-        Retrieve the current ramp/soak timer run method.
-        Returns:
-            int: Current timer run method (0 = Set Temp Only, 1 = Wait for control temp).
-        """
-        response = self.send_message(self.message_builder('f1'))
-        return self.response_to_int(response)
 
     #--------------------------------------------------------------------------
     #    Start stop functions
@@ -1044,64 +998,17 @@ class TC720():
 
     def set_idle(self):
         """
-        Set the device to output control mode with 0 output.
-        This method sets the device to idle mode by setting the mode to 0 and the output to 0.
-        Note that using set_idle() changes the control type to 1. To wake up from idle mode and 
-        be able to get any output other than 0, you need to set the control type back to 0 by calling `set_control_type(1)`).
+        Set in to output control mode with 0 output.
 
         """
         self.set_mode(0)
         self.set_output(0)
         self.set_control_type(1)
 
-    def set_active(self):
-        '''
-        Sets the TC720 device to active control mode.
-
-        This method checks the current control type of the TC720 device. If the device is in idle mode, that is, manual control type 1,
-        it switches the device to active mode (control type 0). This is the counterpart of the `set_idle` method, which
-        sets the device to idle mode.
-
-        Methods:
-        - get_control_type(): Retrieves the current control type of the device.
-        - set_control_type(type): Sets the control type of the device.
-        - verboseprint(message): Prints a verbose message if verbose mode is enabled.
-        '''
-        if self.get_control_type() == 1:
-            self.verboseprint("Setting TC720 to control type 0 (active)")
-            self.set_control_type(0)
-
     #==========================================================================
     #    Combined functions
     #    These are the most useful to the user
     #==========================================================================
-
-    def get_ramp_soak_delta(self):
-        """
-        Retrieve the allowable delta for the ramp/soak timer run method.
-        Returns:
-            float: Fixed temperature difference in degrees (1.00 to 20.00).
-        """
-        # Send the read command (f3)
-        response = self.send_message(self.message_builder('f3'))
-        # Convert response to float (hex to decimal, then divide by 100)
-        delta = self.response_to_int(response) / 100
-        return delta
-
-    def set_ramp_soak_delta(self, delta):
-        """
-        Set the allowable delta for the ramp/soak timer run method.
-        Args:
-            delta (float): Fixed temperature difference in degrees (0.1 to 20.00).
-        """
-        if not (0.1 <= delta <= 20.00):
-            raise ValueError(f"Invalid delta: {delta}. Must be between 0.1 and 20.00.")
-
-        # Convert delta to hexadecimal (multiply by 100, then convert to hex)
-        hex_value = self.int_to_hex(int(delta * 100))
-        # Send the write command (f2) with the hex value
-        self.send_message(self.message_builder('f2', hex_value), write=True)
-        self.verboseprint(f"Ramp Soak Temperature Delta set to: {delta}")
 
     def get_sequence(self, location='all'):
         """
